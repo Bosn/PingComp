@@ -21,16 +21,39 @@ export async function getConn() {
   return mysql.createConnection({ host, port, user, password, database, charset: 'utf8mb4', ssl });
 }
 
+async function addColumn(conn, sql) {
+  try { await conn.query(sql); } catch {}
+}
+
 export async function migrate() {
   const conn = await getConn();
   try {
-    await conn.query(`ALTER TABLE \`${TABLE}\` ADD COLUMN manual_locked TINYINT(1) NOT NULL DEFAULT 0`);
-  } catch {}
-  try {
-    await conn.query(`ALTER TABLE \`${TABLE}\` ADD COLUMN manual_note TEXT NULL`);
-  } catch {}
-  try {
-    await conn.query(`ALTER TABLE \`${TABLE}\` ADD COLUMN manual_updated_at TIMESTAMP NULL DEFAULT NULL`);
-  } catch {}
-  await conn.end();
+    await addColumn(conn, `ALTER TABLE \`${TABLE}\` ADD COLUMN manual_locked TINYINT(1) NOT NULL DEFAULT 0`);
+    await addColumn(conn, `ALTER TABLE \`${TABLE}\` ADD COLUMN manual_note TEXT NULL`);
+    await addColumn(conn, `ALTER TABLE \`${TABLE}\` ADD COLUMN manual_updated_at TIMESTAMP NULL DEFAULT NULL`);
+
+    // M1 fields
+    await addColumn(conn, `ALTER TABLE \`${TABLE}\` ADD COLUMN lead_status VARCHAR(32) NOT NULL DEFAULT 'new'`);
+    await addColumn(conn, `ALTER TABLE \`${TABLE}\` ADD COLUMN owner VARCHAR(128) NULL`);
+    await addColumn(conn, `ALTER TABLE \`${TABLE}\` ADD COLUMN tags VARCHAR(512) NULL`);
+    await addColumn(conn, `ALTER TABLE \`${TABLE}\` ADD COLUMN source_confidence INT NULL`);
+    await addColumn(conn, `ALTER TABLE \`${TABLE}\` ADD COLUMN enrich_status VARCHAR(32) NOT NULL DEFAULT 'pending'`);
+    await addColumn(conn, `ALTER TABLE \`${TABLE}\` ADD COLUMN last_enriched_at TIMESTAMP NULL DEFAULT NULL`);
+
+    await conn.query(`
+      CREATE TABLE IF NOT EXISTS lead_activity_log (
+        id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+        lead_id BIGINT UNSIGNED NOT NULL,
+        action VARCHAR(64) NOT NULL,
+        actor VARCHAR(128) DEFAULT 'system',
+        before_json JSON NULL,
+        after_json JSON NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (id),
+        KEY idx_lead_time (lead_id, created_at)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    `);
+  } finally {
+    await conn.end();
+  }
 }

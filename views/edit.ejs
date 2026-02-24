@@ -51,6 +51,38 @@
             <input class="input" name="latest_news" value="<%= row.latest_news || '' %>">
           </label>
 
+          
+          <label class="field">
+            <span>Lead Status</span>
+            <select class="input" name="lead_status">
+              <option value="new" <%= row.lead_status==='new'?'selected':'' %>>new</option>
+              <option value="contacted" <%= row.lead_status==='contacted'?'selected':'' %>>contacted</option>
+              <option value="qualified" <%= row.lead_status==='qualified'?'selected':'' %>>qualified</option>
+              <option value="disqualified" <%= row.lead_status==='disqualified'?'selected':'' %>>disqualified</option>
+            </select>
+          </label>
+          <label class="field">
+            <span>Owner</span>
+            <input class="input" name="owner" value="<%= row.owner || '' %>">
+          </label>
+          <label class="field full">
+            <span>Tags (comma-separated)</span>
+            <input class="input" name="tags" value="<%= row.tags || '' %>">
+          </label>
+          <label class="field">
+            <span>Source Confidence (0-100)</span>
+            <input class="input" name="source_confidence" type="number" min="0" max="100" value="<%= row.source_confidence || '' %>">
+          </label>
+          <label class="field">
+            <span>Enrich Status</span>
+            <select class="input" name="enrich_status">
+              <option value="pending" <%= row.enrich_status==='pending'?'selected':'' %>>pending</option>
+              <option value="running" <%= row.enrich_status==='running'?'selected':'' %>>running</option>
+              <option value="done" <%= row.enrich_status==='done'?'selected':'' %>>done</option>
+              <option value="failed" <%= row.enrich_status==='failed'?'selected':'' %>>failed</option>
+            </select>
+          </label>
+
           <label class="field full">
             <span>Source</span>
             <input class="input" name="source" value="<%= row.source || '' %>">

@@ -5,8 +5,8 @@ Expand PingComp into a full lead management platform with dashboard, enrichment 
 
 ## Milestones
 - [x] M0 Kickoff: scope, architecture, roadmap
-- [ ] M1 Data model upgrade + migration
-- [ ] M2 Dashboard KPIs + trend cards
+- [x] M1 Data model upgrade + migration
+- [x] M2 Dashboard KPIs + trend cards
 - [ ] M3 Lead management v2 (pagination/sort/filter/bulk)
 - [ ] M4 Enrichment workflow + queue/state
 - [ ] M5 i18n (zh/en) + dark/light/system theme
@@ -14,7 +14,7 @@ Expand PingComp into a full lead management platform with dashboard, enrichment 
 
 ## Current Status
 - Started implementation sequence.
-- Next: M1 schema migration and repository/service layer refactor.
+- Next: M3 Lead management v2 (pagination/sort/filter/bulk).
 
 ## Notes
 - MySQL remains single source of truth.
