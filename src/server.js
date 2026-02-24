@@ -9,6 +9,7 @@ const port = Number(process.env.PORT || 3788);
 app.set('view engine', 'ejs');
 app.set('views', 'views');
 app.use(express.urlencoded({ extended: true }));
+app.use(express.static('public'));
 
 app.get('/', async (req, res) => {
   const q = (req.query.q || '').trim();

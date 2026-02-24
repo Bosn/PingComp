@@ -1,17 +1,83 @@
-<!doctype html><html><head><meta charset="utf-8"><title>Edit</title></head><body>
-<h3>编辑客户 #<%= row.id %></h3>
-<form method="post" action="/edit/<%= row.id %>">
-<p>Name <input name="name" value="<%= row.name || '' %>" style="width:420px"></p>
-<p>Region <input name="region" value="<%= row.region || '' %>"></p>
-<p>Vertical <input name="vertical" value="<%= row.vertical || '' %>" style="width:420px"></p>
-<p>Funding <input name="funding" value="<%= row.funding || '' %>" style="width:420px"></p>
-<p>LinkedIn <input name="linkedin" value="<%= row.linkedin || '' %>" style="width:600px"></p>
-<p>Latest News <input name="latest_news" value="<%= row.latest_news || '' %>" style="width:600px"></p>
-<p>Source <input name="source" value="<%= row.source || '' %>" style="width:420px"></p>
-<p>Score <input name="tidb_potential_score" type="number" value="<%= row.tidb_potential_score || '' %>"></p>
-<p>Reason<br><textarea name="tidb_potential_reason" rows="4" cols="100"><%= row.tidb_potential_reason || '' %></textarea></p>
-<p>Manual Note<br><textarea name="manual_note" rows="3" cols="100"><%= row.manual_note || '' %></textarea></p>
-<button type="submit">保存并锁定</button>
-<a href="/">返回</a>
-</form>
-</body></html>
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PingComp · 编辑</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <div class="brand">
+        <img src="/logo.svg" class="logo" alt="PingComp logo">
+        <div>
+          <h1>编辑客户 #<%= row.id %></h1>
+          <p>保存后将自动锁定，后续同步不覆盖。</p>
+        </div>
+      </div>
+      <a class="btn" href="/">返回列表</a>
+    </div>
+
+    <div class="card" style="padding:16px;">
+      <form method="post" action="/edit/<%= row.id %>">
+        <div class="edit-grid">
+          <label class="field">
+            <span>Name</span>
+            <input class="input" name="name" value="<%= row.name || '' %>">
+          </label>
+          <label class="field">
+            <span>Region</span>
+            <input class="input" name="region" value="<%= row.region || '' %>">
+          </label>
+
+          <label class="field full">
+            <span>Vertical</span>
+            <input class="input" name="vertical" value="<%= row.vertical || '' %>">
+          </label>
+
+          <label class="field full">
+            <span>Funding</span>
+            <input class="input" name="funding" value="<%= row.funding || '' %>">
+          </label>
+
+          <label class="field full">
+            <span>LinkedIn</span>
+            <input class="input" name="linkedin" value="<%= row.linkedin || '' %>">
+          </label>
+
+          <label class="field full">
+            <span>Latest News / Source URL</span>
+            <input class="input" name="latest_news" value="<%= row.latest_news || '' %>">
+          </label>
+
+          <label class="field full">
+            <span>Source</span>
+            <input class="input" name="source" value="<%= row.source || '' %>">
+          </label>
+
+          <label class="field">
+            <span>TiDB Potential Score (0-100)</span>
+            <input class="input" name="tidb_potential_score" type="number" min="0" max="100" value="<%= row.tidb_potential_score || '' %>">
+          </label>
+
+          <label class="field full">
+            <span>TiDB Potential Reason</span>
+            <textarea class="input" name="tidb_potential_reason"><%= row.tidb_potential_reason || '' %></textarea>
+          </label>
+
+          <label class="field full">
+            <span>Manual Note</span>
+            <textarea class="input" name="manual_note"><%= row.manual_note || '' %></textarea>
+          </label>
+        </div>
+
+        <div style="margin-top:12px;display:flex;gap:10px;">
+          <button class="btn primary" type="submit">保存并锁定</button>
+          <a class="btn" href="/">取消</a>
+        </div>
+      </form>
+    </div>
+  </div>
+</body>
+</html>
