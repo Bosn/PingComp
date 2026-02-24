@@ -1,0 +1,17 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Edit</title></head><body>
+<h3>编辑客户 #<%= row.id %></h3>
+<form method="post" action="/edit/<%= row.id %>">
+<p>Name <input name="name" value="<%= row.name || '' %>" style="width:420px"></p>
+<p>Region <input name="region" value="<%= row.region || '' %>"></p>
+<p>Vertical <input name="vertical" value="<%= row.vertical || '' %>" style="width:420px"></p>
+<p>Funding <input name="funding" value="<%= row.funding || '' %>" style="width:420px"></p>
+<p>LinkedIn <input name="linkedin" value="<%= row.linkedin || '' %>" style="width:600px"></p>
+<p>Latest News <input name="latest_news" value="<%= row.latest_news || '' %>" style="width:600px"></p>
+<p>Source <input name="source" value="<%= row.source || '' %>" style="width:420px"></p>
+<p>Score <input name="tidb_potential_score" type="number" value="<%= row.tidb_potential_score || '' %>"></p>
+<p>Reason<br><textarea name="tidb_potential_reason" rows="4" cols="100"><%= row.tidb_potential_reason || '' %></textarea></p>
+<p>Manual Note<br><textarea name="manual_note" rows="3" cols="100"><%= row.manual_note || '' %></textarea></p>
+<button type="submit">保存并锁定</button>
+<a href="/">返回</a>
+</form>
+</body></html>
