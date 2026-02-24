@@ -16,46 +16,70 @@
           <p>潜在客户人工清洗与标注 · MySQL as Source of Truth</p>
         </div>
       </div>
-      <div style="display:flex;gap:8px;"><a class="btn" href="/dashboard">Dashboard</a><a class="btn" href="/export.csv">导出 CSV</a></div>
+      <div style="display:flex;gap:8px;">
+        <a class="btn" href="/dashboard">Dashboard</a>
+        <a class="btn" href="/export.csv">导出 CSV</a>
+      </div>
     </div>
 
     <div class="card topbar">
-      <form method="get" action="/" class="filters">
-        <input class="input" name="q" placeholder="搜索 Name / Vertical / Source" value="<%= q %>">
+      <form method="get" action="/" class="filters" style="grid-template-columns:1.4fr 120px 160px 160px 100px 100px auto;">
+        <input class="input" name="q" placeholder="搜索 Name / Vertical / Source / Tags" value="<%= q %>">
         <input class="input" name="minScore" type="number" min="0" max="100" placeholder="最低分" value="<%= min || '' %>">
-        <label class="btn ghost"><input type="checkbox" name="locked" value="1" <%= onlyLocked ? 'checked' : '' %>> 仅人工锁定</label>
+        <select class="input" name="status">
+          <option value="">状态(全部)</option>
+          <% (statusRows||[]).forEach(s=> { %>
+            <option value="<%= s.lead_status %>" <%= status===s.lead_status ? 'selected':'' %>><%= s.lead_status %> (<%= s.c %>)</option>
+          <% }) %>
+        </select>
+        <select class="input" name="sort">
+          <option value="score_desc" <%= sort==='score_desc'?'selected':'' %>>分数↓</option>
+          <option value="score_asc" <%= sort==='score_asc'?'selected':'' %>>分数↑</option>
+          <option value="updated_desc" <%= sort==='updated_desc'?'selected':'' %>>更新↓</option>
+          <option value="updated_asc" <%= sort==='updated_asc'?'selected':'' %>>更新↑</option>
+          <option value="name_asc" <%= sort==='name_asc'?'selected':'' %>>名称A-Z</option>
+          <option value="name_desc" <%= sort==='name_desc'?'selected':'' %>>名称Z-A</option>
+        </select>
+        <input class="input" name="pageSize" type="number" min="10" max="200" value="<%= pageSize %>">
+        <label class="btn ghost"><input type="checkbox" name="locked" value="1" <%= onlyLocked ? 'checked' : '' %>> 仅锁定</label>
         <button class="btn primary" type="submit">筛选</button>
-        <a class="btn" href="/">重置</a>
       </form>
       <div class="stats">
-        <span>显示条数：<strong><%= rows.length %></strong></span>
+        <span>总数：<strong><%= total %></strong></span>
+        <span>页码：<strong><%= page %>/<%= totalPages %></strong></span>
         <span>说明：编辑即自动锁定，后续同步不会覆盖。</span>
       </div>
+    </div>
+
+    <div class="card" style="padding:10px;margin-top:12px;">
+      <form method="post" action="/bulk" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+        <input class="input" style="max-width:480px" name="ids" placeholder="批量ID，逗号分隔，例如 12,15,20">
+        <select class="input" name="action" style="max-width:220px">
+          <option value="lock">批量锁定</option>
+          <option value="unlock">批量解锁</option>
+          <option value="status:new">状态→new</option>
+          <option value="status:contacted">状态→contacted</option>
+          <option value="status:qualified">状态→qualified</option>
+          <option value="status:disqualified">状态→disqualified</option>
+        </select>
+        <button class="btn" type="submit">执行批量操作</button>
+      </form>
     </div>
 
     <div class="card table-wrap">
       <table>
         <tr>
-          <th>ID</th>
-          <th>Name</th>
-          <th>Score</th>
-          <th>Locked</th>
-          <th>Vertical</th>
-          <th>LinkedIn</th>
-          <th>Latest</th>
-          <th>Reason</th>
-          <th>Action</th>
+          <th>ID</th><th>Name</th><th>Score</th><th>Status</th><th>Owner</th><th>Locked</th><th>Vertical</th><th>LinkedIn</th><th>Latest</th><th>Reason</th><th>Action</th>
         </tr>
         <% rows.forEach(r=> { %>
           <% const s = Number(r.tidb_potential_score || 0); %>
           <% const scoreClass = s >= 75 ? 'score-high' : (s >= 50 ? 'score-mid' : 'score-low'); %>
           <tr>
             <td><%= r.id %></td>
-            <td>
-              <div><strong><%= r.name %></strong></div>
-              <div class="muted"><%= r.source || '' %></div>
-            </td>
+            <td><div><strong><%= r.name %></strong></div><div class="muted"><%= r.source || '' %></div></td>
             <td><span class="badge <%= scoreClass %>"><%= r.tidb_potential_score ?? '-' %></span></td>
+            <td><%= r.lead_status || 'new' %></td>
+            <td><%= r.owner || '' %></td>
             <td><span class="<%= r.manual_locked ? 'locked' : 'muted' %>"><%= r.manual_locked ? 'LOCKED' : '—' %></span></td>
             <td><%= r.vertical || '' %></td>
             <td><% if (r.linkedin) { %><a class="link" href="<%= r.linkedin %>" target="_blank">LinkedIn</a><% } %></td>
@@ -65,15 +89,18 @@
               <div class="row-actions">
                 <a class="btn" href="/edit/<%= r.id %>">编辑</a>
                 <% if (r.manual_locked) { %>
-                  <form class="form-inline" method="post" action="/unlock/<%= r.id %>">
-                    <button class="btn" type="submit">解锁</button>
-                  </form>
+                  <form class="form-inline" method="post" action="/unlock/<%= r.id %>"><button class="btn" type="submit">解锁</button></form>
                 <% } %>
               </div>
             </td>
           </tr>
         <% }) %>
       </table>
+    </div>
+
+    <div style="display:flex;justify-content:space-between;gap:10px;margin-top:12px;">
+      <a class="btn" href="/?q=<%= encodeURIComponent(q||'') %>&minScore=<%= min||'' %>&status=<%= status||'' %>&sort=<%= sort %>&pageSize=<%= pageSize %>&locked=<%= onlyLocked?1:'' %>&page=<%= Math.max(1,page-1) %>">上一页</a>
+      <a class="btn" href="/?q=<%= encodeURIComponent(q||'') %>&minScore=<%= min||'' %>&status=<%= status||'' %>&sort=<%= sort %>&pageSize=<%= pageSize %>&locked=<%= onlyLocked?1:'' %>&page=<%= Math.min(totalPages,page+1) %>">下一页</a>
     </div>
   </div>
 </body>
