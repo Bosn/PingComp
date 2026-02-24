@@ -12,6 +12,80 @@ app.use(express.urlencoded({ extended: true }));
 app.use(express.static('public'));
 
 
+
+
+app.get('/enrich', async (_req, res) => {
+  const conn = await getConn();
+  const [rows] = await conn.query(`
+    SELECT q.id, q.lead_id, q.status, q.attempts, q.last_error, q.updated_at, c.name, c.enrich_status
+    FROM lead_enrichment_queue q
+    LEFT JOIN \`${TABLE}\` c ON c.id = q.lead_id
+    ORDER BY q.updated_at DESC
+    LIMIT 500
+  `);
+  const [[stats]] = await conn.query(`
+    SELECT
+      SUM(status='pending') pending,
+      SUM(status='running') running,
+      SUM(status='done') done_count,
+      SUM(status='failed') failed
+    FROM lead_enrichment_queue
+  `);
+  await conn.end();
+  res.render('enrich', { rows, stats: stats || {pending:0,running:0,done_count:0,failed:0} });
+});
+
+app.post('/enrich/enqueue', async (req, res) => {
+  const idsRaw = String(req.body.ids || '').trim();
+  const ids = idsRaw.split(',').map(x => Number(x.trim())).filter(n => Number.isFinite(n) && n > 0);
+  if (!ids.length) return res.redirect('/enrich');
+  const conn = await getConn();
+  for (const id of ids) {
+    await conn.execute(
+      `INSERT INTO lead_enrichment_queue (lead_id, status, attempts)
+       VALUES (?, 'pending', 0)
+       ON DUPLICATE KEY UPDATE updated_at=CURRENT_TIMESTAMP`,
+      [id]
+    );
+  }
+  await conn.end();
+  res.redirect('/enrich');
+});
+
+app.post('/enrich/run', async (_req, res) => {
+  const conn = await getConn();
+  const [jobs] = await conn.query(`
+    SELECT q.id, q.lead_id, q.attempts, c.name, c.latest_news, c.linkedin, c.manual_locked
+    FROM lead_enrichment_queue q
+    JOIN \`${TABLE}\` c ON c.id=q.lead_id
+    WHERE q.status IN ('pending','failed')
+    ORDER BY q.updated_at ASC
+    LIMIT 20
+  `);
+
+  for (const j of jobs) {
+    try {
+      await conn.execute(`UPDATE lead_enrichment_queue SET status='running', attempts=attempts+1 WHERE id=?`, [j.id]);
+      // placeholder enrichment: mark as done, touch enrich_status/last_enriched_at
+      await conn.execute(`UPDATE \`${TABLE}\` SET enrich_status='done', last_enriched_at=NOW() WHERE id=?`, [j.lead_id]);
+      await conn.execute(`UPDATE lead_enrichment_queue SET status='done', last_error=NULL WHERE id=?`, [j.id]);
+    } catch (e) {
+      await conn.execute(`UPDATE lead_enrichment_queue SET status='failed', last_error=? WHERE id=?`, [String(e.message || e).slice(0,800), j.id]);
+      await conn.execute(`UPDATE \`${TABLE}\` SET enrich_status='failed' WHERE id=?`, [j.lead_id]);
+    }
+  }
+
+  await conn.end();
+  res.redirect('/enrich');
+});
+
+app.post('/enrich/retry/:id', async (req, res) => {
+  const conn = await getConn();
+  await conn.execute(`UPDATE lead_enrichment_queue SET status='pending', last_error=NULL WHERE id=?`, [req.params.id]);
+  await conn.end();
+  res.redirect('/enrich');
+});
+
 app.get('/dashboard', async (_req, res) => {
   const conn = await getConn();
   const [[tot]] = await conn.query(`SELECT COUNT(*) c FROM \`${TABLE}\``);

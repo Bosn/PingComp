@@ -40,6 +40,24 @@ export async function migrate() {
     await addColumn(conn, `ALTER TABLE \`${TABLE}\` ADD COLUMN enrich_status VARCHAR(32) NOT NULL DEFAULT 'pending'`);
     await addColumn(conn, `ALTER TABLE \`${TABLE}\` ADD COLUMN last_enriched_at TIMESTAMP NULL DEFAULT NULL`);
 
+
+
+    await conn.query(`
+      CREATE TABLE IF NOT EXISTS lead_enrichment_queue (
+        id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+        lead_id BIGINT UNSIGNED NOT NULL,
+        status VARCHAR(32) NOT NULL DEFAULT 'pending',
+        attempts INT NOT NULL DEFAULT 0,
+        last_error TEXT NULL,
+        payload_json JSON NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        PRIMARY KEY (id),
+        KEY idx_status_updated (status, updated_at),
+        UNIQUE KEY uniq_lead_pending (lead_id, status)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    `);
+
     await conn.query(`
       CREATE TABLE IF NOT EXISTS lead_activity_log (
         id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
