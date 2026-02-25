@@ -1,6 +1,6 @@
 import express, { type NextFunction, type Request, type Response } from 'express';
 import dotenv from 'dotenv';
-import { auth, requiresAuth } from 'express-openid-connect';
+import { auth } from 'express-openid-connect';
 import { getConn, migrate, TABLE } from './db.js';
 
 dotenv.config();
@@ -34,7 +34,11 @@ if (authEnabled) {
 
 const ensureAuth = (req: Request, res: Response, next: NextFunction) => {
   if (!authEnabled) return next();
-  return (requiresAuth() as any)(req, res, next);
+  const isAuthed = (req as any).oidc?.isAuthenticated?.();
+  if (isAuthed) return next();
+  const wantsJson = req.path.startsWith('/api/') || String(req.headers.accept || '').includes('application/json');
+  if (wantsJson) return res.status(401).json({ ok: false, error: 'unauthorized' });
+  return res.redirect('/login');
 };
 
 app.get('/api/health', (_req: Request, res: Response) => res.json({ ok: true }));
