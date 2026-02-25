@@ -15,6 +15,25 @@ app.use(express.static('public'));
 const authEnabled = String(process.env.AUTH0_ENABLED || '').toLowerCase() === 'true';
 const baseURL = process.env.APP_BASE_URL || `http://localhost:${port}`;
 
+app.get('/auth/denied', (req: Request, res: Response) => {
+  const msg = String(req.query.message || 'Only pingcap.com accounts are allowed.').replace(/[<>]/g, '');
+  res.status(403).send(`<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"/><title>Access denied</title></head><body style="font-family: -apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica,Arial,sans-serif; padding: 28px; line-height:1.5;">
+    <h2>Access denied</h2>
+    <p>${msg}</p>
+    <p><a href="/logout">Log out</a> · <a href="/login">Try another account</a></p>
+  </body></html>`);
+});
+
+// Catch Auth0 callback deny/error and show user-friendly page instead of plain "Bad request"
+app.get('/callback', (req: Request, res: Response, next: NextFunction) => {
+  const err = String(req.query.error || '').toLowerCase();
+  if (err) {
+    const desc = String(req.query.error_description || req.query.error || 'Access denied');
+    return res.redirect(`/auth/denied?message=${encodeURIComponent(desc)}`);
+  }
+  return next();
+});
+
 if (authEnabled) {
   app.use(auth({
     authRequired: false,
