@@ -9,6 +9,7 @@ import {
   Modal,
   NumberInput,
   Paper,
+  ScrollArea,
   Select,
   SimpleGrid,
   Stack,
@@ -17,9 +18,11 @@ import {
   Text,
   TextInput,
   Textarea,
+  ThemeIcon,
   Title,
   useMantineColorScheme,
 } from '@mantine/core';
+import { IconActivity, IconBolt, IconBrain, IconFilter, IconGauge, IconMoonStars, IconSun, IconWorld } from '@tabler/icons-react';
 
 type Lead = {
   id: number;
@@ -92,6 +95,7 @@ const I18N = {
     exportCsv: '导出CSV',
     runBatch: '执行一轮(20条)',
     enqueue: '入队',
+    noData: '暂无数据',
   },
   en: {
     title: 'PingComp',
@@ -117,6 +121,7 @@ const I18N = {
     exportCsv: 'Export CSV',
     runBatch: 'Run batch (20)',
     enqueue: 'Enqueue',
+    noData: 'No data',
   },
 } as const;
 
@@ -128,6 +133,8 @@ function useLocalLang() {
   };
   return { lang, setLang };
 }
+
+const scoreColor = (v: number) => (v >= 75 ? 'green' : v >= 50 ? 'yellow' : 'red');
 
 export function App() {
   const { colorScheme, setColorScheme } = useMantineColorScheme();
@@ -151,12 +158,15 @@ export function App() {
   const [enrich, setEnrich] = useState<EnrichPayload | null>(null);
   const [enqueueIds, setEnqueueIds] = useState('');
 
-  const statusOptions = useMemo(() => [
-    { value: 'new', label: 'new' },
-    { value: 'contacted', label: 'contacted' },
-    { value: 'qualified', label: 'qualified' },
-    { value: 'disqualified', label: 'disqualified' },
-  ], []);
+  const statusOptions = useMemo(
+    () => [
+      { value: 'new', label: 'new' },
+      { value: 'contacted', label: 'contacted' },
+      { value: 'qualified', label: 'qualified' },
+      { value: 'disqualified', label: 'disqualified' },
+    ],
+    []
+  );
 
   async function loadLeads() {
     setLoading(true);
@@ -194,6 +204,7 @@ export function App() {
   useEffect(() => {
     if (tab === 'dashboard') loadDashboard();
     if (tab === 'enrich') loadEnrich();
+    if (tab === 'leads') loadLeads();
   }, [tab]);
 
   async function saveLead() {
@@ -225,25 +236,22 @@ export function App() {
   return (
     <AppShell padding="md">
       <Stack gap="md">
-        <Paper withBorder p="md" radius="md">
+        <Paper withBorder p="md" radius="md" style={{ backdropFilter: 'blur(8px)' }}>
           <Group justify="space-between" align="center">
             <Group>
-              <img src="/logo.svg" alt="PingComp" width={32} height={32} />
+              <img src="/logo.svg" alt="PingComp" width={36} height={36} />
               <Stack gap={0}>
                 <Title order={2}>{t.title}</Title>
-                <Text size="sm" c="dimmed">{t.subtitle}</Text>
+                <Text size="sm" c="dimmed">
+                  {t.subtitle}
+                </Text>
               </Stack>
             </Group>
 
             <Group>
+              <Select w={110} data={[{ value: 'zh', label: '中文' }, { value: 'en', label: 'EN' }]} value={lang} onChange={(v) => setLang((v as 'zh' | 'en') || 'zh')} leftSection={<IconWorld size={14} />} />
               <Select
-                w={110}
-                data={[{ value: 'zh', label: '中文' }, { value: 'en', label: 'EN' }]}
-                value={lang}
-                onChange={(v) => setLang((v as 'zh' | 'en') || 'zh')}
-              />
-              <Select
-                w={130}
+                w={145}
                 data={[
                   { value: 'auto', label: 'system' },
                   { value: 'dark', label: 'dark' },
@@ -251,44 +259,88 @@ export function App() {
                 ]}
                 value={colorScheme === 'auto' ? 'auto' : colorScheme}
                 onChange={(v) => setColorScheme((v as any) || 'auto')}
+                leftSection={colorScheme === 'light' ? <IconSun size={14} /> : <IconMoonStars size={14} />}
               />
-              <Button component="a" href="/api/export.csv">{t.exportCsv}</Button>
+              <Button component="a" href="/api/export.csv" variant="light">
+                {t.exportCsv}
+              </Button>
             </Group>
           </Group>
         </Paper>
 
         <Tabs value={tab} onChange={setTab}>
           <Tabs.List>
-            <Tabs.Tab value="dashboard">{t.dashboard}</Tabs.Tab>
-            <Tabs.Tab value="leads">{t.leads}</Tabs.Tab>
-            <Tabs.Tab value="enrich">{t.enrich}</Tabs.Tab>
+            <Tabs.Tab value="dashboard" leftSection={<IconGauge size={14} />}>
+              {t.dashboard}
+            </Tabs.Tab>
+            <Tabs.Tab value="leads" leftSection={<IconBrain size={14} />}>
+              {t.leads}
+            </Tabs.Tab>
+            <Tabs.Tab value="enrich" leftSection={<IconBolt size={14} />}>
+              {t.enrich}
+            </Tabs.Tab>
           </Tabs.List>
 
           <Tabs.Panel value="dashboard" pt="md">
             <SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }} spacing="md">
-              <Card withBorder><Text size="sm" c="dimmed">{t.total}</Text><Title order={3}>{dash?.total ?? '-'}</Title></Card>
-              <Card withBorder><Text size="sm" c="dimmed">{t.locked}</Text><Title order={3}>{dash?.locked ?? '-'}</Title></Card>
-              <Card withBorder><Text size="sm" c="dimmed">{t.avg}</Text><Title order={3}>{dash?.avgScore ?? '-'}</Title></Card>
-              <Card withBorder><Text size="sm" c="dimmed">{t.lockRate}</Text><Title order={3}>{dash?.total ? Math.round((dash.locked / dash.total) * 100) : 0}%</Title></Card>
+              <Card withBorder shadow="sm" radius="md">
+                <Text size="sm" c="dimmed">
+                  {t.total}
+                </Text>
+                <Title order={3}>{dash?.total ?? '-'}</Title>
+              </Card>
+              <Card withBorder shadow="sm" radius="md">
+                <Text size="sm" c="dimmed">
+                  {t.locked}
+                </Text>
+                <Title order={3}>{dash?.locked ?? '-'}</Title>
+              </Card>
+              <Card withBorder shadow="sm" radius="md">
+                <Text size="sm" c="dimmed">
+                  {t.avg}
+                </Text>
+                <Title order={3}>{dash?.avgScore ?? '-'}</Title>
+              </Card>
+              <Card withBorder shadow="sm" radius="md">
+                <Text size="sm" c="dimmed">
+                  {t.lockRate}
+                </Text>
+                <Title order={3}>{dash?.total ? Math.round((dash.locked / dash.total) * 100) : 0}%</Title>
+              </Card>
             </SimpleGrid>
 
             <SimpleGrid cols={{ base: 1, lg: 2 }} spacing="md" mt="md">
-              <Card withBorder>
-                <Title order={4} mb="sm">Status distribution</Title>
+              <Card withBorder radius="md">
+                <Title order={4} mb="sm">
+                  Status distribution
+                </Title>
                 {(dash?.statusRows || []).map((s) => (
                   <Group key={s.lead_status} justify="space-between" py={6}>
-                    <Text>{s.lead_status}</Text><Badge>{s.c}</Badge>
+                    <Text>{s.lead_status}</Text>
+                    <Badge>{s.c}</Badge>
                   </Group>
                 ))}
               </Card>
 
-              <Card withBorder>
-                <Title order={4} mb="sm">Top leads</Title>
-                <Table striped>
-                  <Table.Thead><Table.Tr><Table.Th>ID</Table.Th><Table.Th>Name</Table.Th><Table.Th>Score</Table.Th></Table.Tr></Table.Thead>
+              <Card withBorder radius="md">
+                <Title order={4} mb="sm">
+                  Top leads
+                </Title>
+                <Table striped highlightOnHover>
+                  <Table.Thead>
+                    <Table.Tr>
+                      <Table.Th>ID</Table.Th>
+                      <Table.Th>Name</Table.Th>
+                      <Table.Th>Score</Table.Th>
+                    </Table.Tr>
+                  </Table.Thead>
                   <Table.Tbody>
                     {(dash?.topRows || []).map((r) => (
-                      <Table.Tr key={r.id}><Table.Td>{r.id}</Table.Td><Table.Td>{r.name}</Table.Td><Table.Td>{r.tidb_potential_score ?? '-'}</Table.Td></Table.Tr>
+                      <Table.Tr key={r.id}>
+                        <Table.Td>{r.id}</Table.Td>
+                        <Table.Td>{r.name}</Table.Td>
+                        <Table.Td>{r.tidb_potential_score ?? '-'}</Table.Td>
+                      </Table.Tr>
                     ))}
                   </Table.Tbody>
                 </Table>
@@ -299,86 +351,159 @@ export function App() {
           <Tabs.Panel value="leads" pt="md">
             <Paper withBorder p="md" radius="md">
               <Group wrap="wrap" align="end">
-                <TextInput w={280} placeholder={t.search} value={q} onChange={(e) => setQ(e.currentTarget.value)} />
-                <NumberInput w={120} placeholder={t.minScore} value={minScore} onChange={(v: any) => setMinScore(v ?? '')} min={0} max={100} allowNegative={false} />
+                <TextInput leftSection={<IconFilter size={14} />} w={320} placeholder={t.search} value={q} onChange={(e) => setQ(e.currentTarget.value)} />
+                <NumberInput w={140} placeholder={t.minScore} value={minScore} onChange={(v: any) => setMinScore(v ?? '')} min={0} max={100} allowNegative={false} />
                 <Select w={170} placeholder={t.status} data={statusOptions} value={status} onChange={setStatus} clearable />
-                <Select
-                  w={150}
-                  data={[{ value: '0', label: 'All' }, { value: '1', label: t.lockOnly }]}
-                  value={lockedOnly ? '1' : '0'}
-                  onChange={(v) => setLockedOnly(v === '1')}
-                />
-                <Button loading={loading} onClick={() => { setPage(1); loadLeads(); }}>{t.filter}</Button>
-                <Button variant="default" onClick={() => { setQ(''); setMinScore(''); setStatus(null); setLockedOnly(false); setPage(1); setTimeout(loadLeads, 0); }}>{t.reset}</Button>
+                <Select w={160} data={[{ value: '0', label: 'All' }, { value: '1', label: t.lockOnly }]} value={lockedOnly ? '1' : '0'} onChange={(v) => setLockedOnly(v === '1')} />
+                <Button loading={loading} onClick={() => { setPage(1); loadLeads(); }}>
+                  {t.filter}
+                </Button>
+                <Button variant="default" onClick={() => { setQ(''); setMinScore(''); setStatus(null); setLockedOnly(false); setPage(1); setTimeout(loadLeads, 0); }}>
+                  {t.reset}
+                </Button>
               </Group>
 
               <Group mt="xs" mb="sm" c="dimmed" justify="space-between">
-                <Text size="sm">{t.total}: {totalRows} · {t.page}: {page}/{totalPages}</Text>
+                <Text size="sm">
+                  {t.total}: {totalRows} · {t.page}: {page}/{totalPages}
+                </Text>
                 <Text size="sm">CreatedAt / UpdatedAt included</Text>
               </Group>
 
               <Divider mb="sm" />
 
-              <Table striped highlightOnHover withTableBorder withColumnBorders>
-                <Table.Thead>
-                  <Table.Tr>
-                    <Table.Th>ID</Table.Th><Table.Th>Name</Table.Th><Table.Th>Score</Table.Th><Table.Th>Status</Table.Th>
-                    <Table.Th>Owner</Table.Th><Table.Th>Locked</Table.Th><Table.Th>Vertical</Table.Th>
-                    <Table.Th>CreatedAt</Table.Th><Table.Th>UpdatedAt</Table.Th><Table.Th>Action</Table.Th>
-                  </Table.Tr>
-                </Table.Thead>
-                <Table.Tbody>
-                  {rows.map((r) => (
-                    <Table.Tr key={r.id}>
-                      <Table.Td>{r.id}</Table.Td>
-                      <Table.Td><Text fw={600}>{r.name}</Text><Text size="xs" c="dimmed">{r.source}</Text></Table.Td>
-                      <Table.Td><Badge color={(r.tidb_potential_score ?? 0) >= 75 ? 'green' : (r.tidb_potential_score ?? 0) >= 50 ? 'yellow' : 'red'}>{r.tidb_potential_score ?? '-'}</Badge></Table.Td>
-                      <Table.Td>{r.lead_status}</Table.Td>
-                      <Table.Td>{r.owner || '-'}</Table.Td>
-                      <Table.Td>{r.manual_locked ? 'LOCKED' : '-'}</Table.Td>
-                      <Table.Td>{r.vertical}</Table.Td>
-                      <Table.Td>{r.created_at || ''}</Table.Td>
-                      <Table.Td>{r.updated_at || ''}</Table.Td>
-                      <Table.Td><Button size="xs" onClick={() => setSelected({ ...r })}>{t.edit}</Button></Table.Td>
+              <ScrollArea>
+                <Table striped highlightOnHover withTableBorder withColumnBorders miw={1300}>
+                  <Table.Thead>
+                    <Table.Tr>
+                      <Table.Th>ID</Table.Th>
+                      <Table.Th>Name</Table.Th>
+                      <Table.Th>Score</Table.Th>
+                      <Table.Th>Status</Table.Th>
+                      <Table.Th>Owner</Table.Th>
+                      <Table.Th>Locked</Table.Th>
+                      <Table.Th>Vertical</Table.Th>
+                      <Table.Th>CreatedAt</Table.Th>
+                      <Table.Th>UpdatedAt</Table.Th>
+                      <Table.Th>Action</Table.Th>
                     </Table.Tr>
-                  ))}
-                </Table.Tbody>
-              </Table>
+                  </Table.Thead>
+                  <Table.Tbody>
+                    {rows.length === 0 ? (
+                      <Table.Tr>
+                        <Table.Td colSpan={10}>
+                          <Text c="dimmed" ta="center" py="md">
+                            {t.noData}
+                          </Text>
+                        </Table.Td>
+                      </Table.Tr>
+                    ) : (
+                      rows.map((r) => (
+                        <Table.Tr key={r.id}>
+                          <Table.Td>{r.id}</Table.Td>
+                          <Table.Td>
+                            <Text fw={600}>{r.name}</Text>
+                            <Text size="xs" c="dimmed">
+                              {r.source}
+                            </Text>
+                          </Table.Td>
+                          <Table.Td>
+                            <Badge color={scoreColor(r.tidb_potential_score ?? 0)}>{r.tidb_potential_score ?? '-'}</Badge>
+                          </Table.Td>
+                          <Table.Td>{r.lead_status}</Table.Td>
+                          <Table.Td>{r.owner || '-'}</Table.Td>
+                          <Table.Td>{r.manual_locked ? 'LOCKED' : '-'}</Table.Td>
+                          <Table.Td>{r.vertical}</Table.Td>
+                          <Table.Td>{r.created_at || ''}</Table.Td>
+                          <Table.Td>{r.updated_at || ''}</Table.Td>
+                          <Table.Td>
+                            <Button size="xs" onClick={() => setSelected({ ...r })}>
+                              {t.edit}
+                            </Button>
+                          </Table.Td>
+                        </Table.Tr>
+                      ))
+                    )}
+                  </Table.Tbody>
+                </Table>
+              </ScrollArea>
 
               <Group mt="sm" justify="space-between">
-                <Button variant="default" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>{t.prev}</Button>
-                <Button variant="default" disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)}>{t.next}</Button>
+                <Button variant="default" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
+                  {t.prev}
+                </Button>
+                <Button variant="default" disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)}>
+                  {t.next}
+                </Button>
               </Group>
             </Paper>
           </Tabs.Panel>
 
           <Tabs.Panel value="enrich" pt="md">
             <SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }} spacing="md">
-              <Card withBorder><Text size="sm" c="dimmed">Pending</Text><Title order={3}>{enrich?.stats?.pending ?? 0}</Title></Card>
-              <Card withBorder><Text size="sm" c="dimmed">Running</Text><Title order={3}>{enrich?.stats?.running ?? 0}</Title></Card>
-              <Card withBorder><Text size="sm" c="dimmed">Done</Text><Title order={3}>{enrich?.stats?.done_count ?? 0}</Title></Card>
-              <Card withBorder><Text size="sm" c="dimmed">Failed</Text><Title order={3}>{enrich?.stats?.failed ?? 0}</Title></Card>
+              <Card withBorder radius="md">
+                <Text size="sm" c="dimmed">
+                  Pending
+                </Text>
+                <Title order={3}>{enrich?.stats?.pending ?? 0}</Title>
+              </Card>
+              <Card withBorder radius="md">
+                <Text size="sm" c="dimmed">
+                  Running
+                </Text>
+                <Title order={3}>{enrich?.stats?.running ?? 0}</Title>
+              </Card>
+              <Card withBorder radius="md">
+                <Text size="sm" c="dimmed">
+                  Done
+                </Text>
+                <Title order={3}>{enrich?.stats?.done_count ?? 0}</Title>
+              </Card>
+              <Card withBorder radius="md">
+                <Text size="sm" c="dimmed">
+                  Failed
+                </Text>
+                <Title order={3}>{enrich?.stats?.failed ?? 0}</Title>
+              </Card>
             </SimpleGrid>
 
             <Paper withBorder p="md" radius="md" mt="md">
               <Group>
                 <TextInput style={{ flex: 1 }} placeholder="IDs, e.g. 12,25,39" value={enqueueIds} onChange={(e) => setEnqueueIds(e.currentTarget.value)} />
                 <Button onClick={enqueue}>{t.enqueue}</Button>
-                <Button variant="light" onClick={runEnrichBatch}>{t.runBatch}</Button>
+                <Button variant="light" leftSection={<IconActivity size={14} />} onClick={runEnrichBatch}>
+                  {t.runBatch}
+                </Button>
               </Group>
             </Paper>
 
             <Paper withBorder p="md" radius="md" mt="md">
-              <Table striped>
-                <Table.Thead>
-                  <Table.Tr><Table.Th>QueueID</Table.Th><Table.Th>LeadID</Table.Th><Table.Th>Name</Table.Th><Table.Th>Status</Table.Th><Table.Th>Attempts</Table.Th><Table.Th>Updated</Table.Th></Table.Tr>
-                </Table.Thead>
-                <Table.Tbody>
-                  {(enrich?.rows || []).map((r) => (
-                    <Table.Tr key={r.id}><Table.Td>{r.id}</Table.Td><Table.Td>{r.lead_id}</Table.Td><Table.Td>{r.name || ''}</Table.Td><Table.Td>{r.status}</Table.Td><Table.Td>{r.attempts}</Table.Td><Table.Td>{r.updated_at || ''}</Table.Td></Table.Tr>
-                  ))}
-                </Table.Tbody>
-              </Table>
+              <ScrollArea>
+                <Table striped highlightOnHover withTableBorder withColumnBorders miw={960}>
+                  <Table.Thead>
+                    <Table.Tr>
+                      <Table.Th>QueueID</Table.Th>
+                      <Table.Th>LeadID</Table.Th>
+                      <Table.Th>Name</Table.Th>
+                      <Table.Th>Status</Table.Th>
+                      <Table.Th>Attempts</Table.Th>
+                      <Table.Th>Updated</Table.Th>
+                    </Table.Tr>
+                  </Table.Thead>
+                  <Table.Tbody>
+                    {(enrich?.rows || []).map((r) => (
+                      <Table.Tr key={r.id}>
+                        <Table.Td>{r.id}</Table.Td>
+                        <Table.Td>{r.lead_id}</Table.Td>
+                        <Table.Td>{r.name || ''}</Table.Td>
+                        <Table.Td>{r.status}</Table.Td>
+                        <Table.Td>{r.attempts}</Table.Td>
+                        <Table.Td>{r.updated_at || ''}</Table.Td>
+                      </Table.Tr>
+                    ))}
+                  </Table.Tbody>
+                </Table>
+              </ScrollArea>
             </Paper>
           </Tabs.Panel>
         </Tabs>
