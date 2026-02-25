@@ -33,3 +33,5 @@ Expand PingComp into a full lead management platform with dashboard, enrichment 
 - Replaced zh/en buttons with language dropdown
 - Added CreatedAt/UpdatedAt columns on lead table
 - Migrated runtime from JS to TypeScript (tsx + tsconfig + typecheck)
+
+- Switched to React-only UI (removed EJS pages) as requested.

@@ -35,3 +35,10 @@ Open: http://localhost:3788
 ## Manual-governance guarantee
 - Manual edits set `manual_locked=1`.
 - Upstream sync must respect lock and never overwrite locked records.
+
+
+## UI architecture (React-only)
+- EJS pages removed.
+- Web UI is React + Mantine at `/app`.
+- Legacy routes (`/`, `/dashboard`, `/enrich`, `/activity`, `/export`) redirect to `/app`.
+- API endpoints are under `/api/*`.
