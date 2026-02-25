@@ -84,7 +84,7 @@ app.get('/auth/denied', (req: Request, res: Response) => {
     <p class="primary">${primary}</p>
     <p class="detail">${detail}</p>
     <div class="actions">
-      <a class="btn" href="/login?connection=google-oauth2&prompt=login&login_hint=%40pingcap.com">Sign in with @pingcap.com</a>
+      <a class="btn" href="/login-pingcap">Sign in with @pingcap.com</a>
       <a class="btn secondary" href="/logout">Log out</a>
     </div>
   </main>
@@ -131,30 +131,18 @@ const ensureAuth = (req: Request, res: Response, next: NextFunction) => {
 app.get('/api/health', (_req: Request, res: Response) => res.json({ ok: true }));
 
 app.get('/login-pingcap', (req: Request, res: Response) => {
-  const reqOidc = (req as any).oidc;
-  const resOidc = (res as any).oidc;
-  const loginFn = reqOidc?.login || resOidc?.login;
-  if (!authEnabled || !loginFn) return res.redirect('/login');
-  return loginFn.call(reqOidc || resOidc, {
+  if (!authEnabled || !(res as any).oidc?.login) return res.redirect('/login');
+  return (res as any).oidc.login({
     returnTo: '/app',
     authorizationParams: {
+      connection: 'google-oauth2',
       prompt: 'login',
       login_hint: '@pingcap.com',
+      scope: 'openid profile email',
     },
   });
 });
-app.get('/api/auth/me', ensureAuth, (req: Request, res: Response) => {
-  const user = (req as any).oidc?.user || null;
-  res.json({
-    ok: true,
-    user: user ? {
-      sub: user.sub,
-      name: user.name,
-      email: user.email,
-      picture: user.picture,
-    } : null,
-  });
-});
+
 
 app.use('/api', (req: Request, res: Response, next: NextFunction) => {
   if (req.path === '/health') return next();
@@ -420,7 +408,7 @@ app.get('/app/*', ensureAuth, (_req: Request, res: Response) => res.sendFile(pro
 
 // remove EJS UI: always redirect to React app
 app.get('/', (req: Request, res: Response) => {
-  if (authEnabled && !(req as any).oidc?.isAuthenticated?.()) return res.redirect('/login');
+  if (authEnabled && !(req as any).oidc?.isAuthenticated?.()) return res.redirect('/login-pingcap');
   return res.redirect('/app');
 });
 app.get('/dashboard', (_req: Request, res: Response) => res.redirect('/app'));
