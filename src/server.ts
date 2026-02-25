@@ -1,5 +1,6 @@
-import express, { type Request, type Response } from 'express';
+import express, { type NextFunction, type Request, type Response } from 'express';
 import dotenv from 'dotenv';
+import { auth, requiresAuth } from 'express-openid-connect';
 import { getConn, migrate, TABLE } from './db.js';
 
 dotenv.config();
@@ -9,6 +10,52 @@ const port = Number(process.env.PORT || 3788);
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 app.use(express.static('public'));
+
+
+const authEnabled = String(process.env.AUTH0_ENABLED || '').toLowerCase() === 'true';
+const baseURL = process.env.APP_BASE_URL || `http://localhost:${port}`;
+
+if (authEnabled) {
+  app.use(auth({
+    authRequired: false,
+    auth0Logout: true,
+    secret: process.env.AUTH0_SESSION_SECRET || 'pingcomp-dev-session-secret-change-me',
+    baseURL,
+    clientID: process.env.AUTH0_CLIENT_ID || '',
+    issuerBaseURL: process.env.AUTH0_ISSUER_BASE_URL || '',
+    clientSecret: process.env.AUTH0_CLIENT_SECRET || '',
+    routes: {
+      login: '/login',
+      logout: '/logout',
+      callback: '/callback',
+    },
+  }));
+}
+
+const ensureAuth = (req: Request, res: Response, next: NextFunction) => {
+  if (!authEnabled) return next();
+  return (requiresAuth() as any)(req, res, next);
+};
+
+app.get('/api/health', (_req: Request, res: Response) => res.json({ ok: true }));
+app.get('/api/auth/me', ensureAuth, (req: Request, res: Response) => {
+  const user = (req as any).oidc?.user || null;
+  res.json({
+    ok: true,
+    user: user ? {
+      sub: user.sub,
+      name: user.name,
+      email: user.email,
+      picture: user.picture,
+    } : null,
+  });
+});
+
+app.use('/api', (req: Request, res: Response, next: NextFunction) => {
+  if (req.path === '/health') return next();
+  return ensureAuth(req, res, next);
+});
+
 
 async function logActivity(conn: any, leadId: number, action: string, actor = 'pingcomp-ui', beforeObj: any = null, afterObj: any = null) {
   try {
@@ -156,8 +203,6 @@ app.get('/api/export.csv', async (req: Request, res: Response) => {
   res.send(csv);
 });
 
-app.get('/api/health', (_req: Request, res: Response) => res.json({ ok: true }));
-
 
 app.get('/api/dashboard', async (_req: Request, res: Response) => {
   const conn = await getConn();
@@ -265,11 +310,14 @@ app.post('/api/enrich/run', async (_req: Request, res: Response) => {
 });
 
 // -------- React App only --------
-app.use('/app', express.static('web/dist'));
-app.get('/app/*', (_req: Request, res: Response) => res.sendFile(process.cwd() + '/web/dist/index.html'));
+app.use('/app', ensureAuth, express.static('web/dist'));
+app.get('/app/*', ensureAuth, (_req: Request, res: Response) => res.sendFile(process.cwd() + '/web/dist/index.html'));
 
 // remove EJS UI: always redirect to React app
-app.get('/', (_req: Request, res: Response) => res.redirect('/app'));
+app.get('/', (req: Request, res: Response) => {
+  if (authEnabled && !(req as any).oidc?.isAuthenticated?.()) return res.redirect('/login');
+  return res.redirect('/app');
+});
 app.get('/dashboard', (_req: Request, res: Response) => res.redirect('/app'));
 app.get('/enrich', (_req: Request, res: Response) => res.redirect('/app'));
 app.get('/activity', (_req: Request, res: Response) => res.redirect('/app'));

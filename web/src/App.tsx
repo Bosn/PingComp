@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
-  AppShell, Badge, Box, Button, Card, Checkbox, Divider, Group, Modal, NumberInput, Paper, ScrollArea, Select,
+  AppShell, Avatar, Badge, Box, Button, Card, Checkbox, Divider, Group, Modal, NumberInput, Paper, ScrollArea, Select,
   SimpleGrid, Stack, Table, Tabs, Text, TextInput, Textarea, Title, Tooltip, useMantineColorScheme,
 } from '@mantine/core';
 import { IconActivity, IconBolt, IconBrain, IconFilter, IconGauge, IconMoonStars, IconSun, IconWorld } from '@tabler/icons-react';
@@ -39,7 +39,7 @@ const I18N = {
     lockOnly: '仅锁定', prev: '上一页', next: '下一页', edit: '编辑', saveLock: '保存并锁定', total: '总线索',
     locked: '人工锁定', avg: '平均分', lockRate: '锁定占比', exportCsv: '导出CSV', runBatch: '执行一轮(20条)',
     enqueue: '入队', noData: '暂无数据', trend7d: '近7天更新趋势', scoreDist: '评分分布', enrichDist: 'Enrich状态',
-    bulkAction: '批量动作', apply: '执行', selected: '已选', quickViews: '快捷视图', savedViews: '已保存视图', saveView: '保存当前视图', deleteView: '删除视图', viewName: '视图名',
+    bulkAction: '批量动作', apply: '执行', selected: '已选', quickViews: '快捷视图', savedViews: '已保存视图', saveView: '保存当前视图', deleteView: '删除视图', viewName: '视图名', account: '账户', logout: '退出',
   },
   en: {
     title: 'PingComp', subtitle: 'Lead ops workspace', dashboard: 'Dashboard', leads: 'Leads', enrich: 'Enrich Queue',
@@ -47,7 +47,7 @@ const I18N = {
     page: 'Page', lockOnly: 'Locked only', prev: 'Prev', next: 'Next', edit: 'Edit', saveLock: 'Save & lock', total: 'Total leads',
     locked: 'Manual locked', avg: 'Avg score', lockRate: 'Lock ratio', exportCsv: 'Export CSV', runBatch: 'Run batch (20)',
     enqueue: 'Enqueue', noData: 'No data', trend7d: '7-day update trend', scoreDist: 'Score distribution', enrichDist: 'Enrich status',
-    bulkAction: 'Bulk action', apply: 'Apply', selected: 'Selected', quickViews: 'Quick views', savedViews: 'Saved views', saveView: 'Save current view', deleteView: 'Delete view', viewName: 'View name',
+    bulkAction: 'Bulk action', apply: 'Apply', selected: 'Selected', quickViews: 'Quick views', savedViews: 'Saved views', saveView: 'Save current view', deleteView: 'Delete view', viewName: 'View name', account: 'Account', logout: 'Logout',
   },
 } as const;
 
@@ -119,6 +119,7 @@ export function App() {
   const [selectedSavedView, setSelectedSavedView] = useState<string | null>(null);
   const [newViewName, setNewViewName] = useState('');
   const [recentEditedIds, setRecentEditedIds] = useState<Set<number>>(new Set());
+  const [me, setMe] = useState<{ name?: string; email?: string; picture?: string } | null>(null);
 
   const statusOptions = useMemo(() => [
     { value: 'new', label: 'new' }, { value: 'contacted', label: 'contacted' },
@@ -154,6 +155,10 @@ export function App() {
 
   useEffect(() => { loadLeads(); }, [page]);
   useEffect(() => { if (tab === 'dashboard') loadDashboard(); if (tab === 'enrich') loadEnrich(); if (tab === 'leads') loadLeads(); }, [tab]);
+
+  useEffect(() => {
+    fetch('/api/auth/me').then(r => r.ok ? r.json() : null).then(j => setMe(j?.user || null)).catch(() => setMe(null));
+  }, []);
 
   async function saveLead() {
     if (!selected) return;
@@ -262,6 +267,13 @@ export function App() {
                 onChange={(v) => setColorScheme((v as any) || 'auto')}
                 leftSection={colorScheme === 'light' ? <IconSun size={14} /> : <IconMoonStars size={14} />}
               />
+              {me ? (
+                <Group gap={8}>
+                  <Avatar src={me.picture} size={24} radius="xl" />
+                  <Text size="sm" c="dimmed">{me.name || me.email}</Text>
+                  <Button component="a" href="/logout" variant="subtle" size="xs">{t.logout}</Button>
+                </Group>
+              ) : null}
               <Button component="a" href="/api/export.csv" variant="light">{t.exportCsv}</Button>
             </Group>
           </Group>
