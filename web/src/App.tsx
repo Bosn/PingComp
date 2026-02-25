@@ -39,7 +39,7 @@ const I18N = {
     lockOnly: '仅锁定', prev: '上一页', next: '下一页', edit: '编辑', saveLock: '保存并锁定', total: '总线索',
     locked: '人工锁定', avg: '平均分', lockRate: '锁定占比', exportCsv: '导出CSV', runBatch: '执行一轮(20条)',
     enqueue: '入队', noData: '暂无数据', trend7d: '近7天更新趋势', scoreDist: '评分分布', enrichDist: 'Enrich状态',
-    bulkAction: '批量动作', apply: '执行', selected: '已选', quickViews: '快捷视图', savedViews: '已保存视图', saveView: '保存当前视图', deleteView: '删除视图', viewName: '视图名', account: '账户', logout: '退出', delete: '删除', deleteConfirm: '确认删除该线索？',
+    bulkAction: '批量动作', apply: '执行', selected: '已选', quickViews: '快捷视图', savedViews: '已保存视图', saveView: '保存当前视图', deleteView: '删除视图', viewName: '视图名', account: '账户', logout: '退出', delete: '删除', deleteConfirm: '确认删除该线索？', deleteModalTitle: '确认删除', deleteModalDesc: '删除后不可恢复，请确认操作。', cancel: '取消', confirmDelete: '确认删除',
   },
   en: {
     title: 'PingComp', subtitle: 'Lead ops workspace', dashboard: 'Dashboard', leads: 'Leads', enrich: 'Enrich Queue',
@@ -47,7 +47,7 @@ const I18N = {
     page: 'Page', lockOnly: 'Locked only', prev: 'Prev', next: 'Next', edit: 'Edit', saveLock: 'Save & lock', total: 'Total leads',
     locked: 'Manual locked', avg: 'Avg score', lockRate: 'Lock ratio', exportCsv: 'Export CSV', runBatch: 'Run batch (20)',
     enqueue: 'Enqueue', noData: 'No data', trend7d: '7-day update trend', scoreDist: 'Score distribution', enrichDist: 'Enrich status',
-    bulkAction: 'Bulk action', apply: 'Apply', selected: 'Selected', quickViews: 'Quick views', savedViews: 'Saved views', saveView: 'Save current view', deleteView: 'Delete view', viewName: 'View name', account: 'Account', logout: 'Logout', delete: 'Delete', deleteConfirm: 'Delete this lead?',
+    bulkAction: 'Bulk action', apply: 'Apply', selected: 'Selected', quickViews: 'Quick views', savedViews: 'Saved views', saveView: 'Save current view', deleteView: 'Delete view', viewName: 'View name', account: 'Account', logout: 'Logout', delete: 'Delete', deleteConfirm: 'Delete this lead?', deleteModalTitle: 'Confirm deletion', deleteModalDesc: 'This operation cannot be undone.', cancel: 'Cancel', confirmDelete: 'Delete',
   },
 } as const;
 
@@ -122,6 +122,7 @@ export function App() {
   const [me, setMe] = useState<{ name?: string; email?: string; picture?: string } | null>(null);
   const [sortKey, setSortKey] = useState<'id'|'name'|'score'|'lead_status'|'owner'|'vertical'|'created_at'|'updated_at'>('updated_at');
   const [sortDir, setSortDir] = useState<'asc'|'desc'>('desc');
+  const [deleteCtx, setDeleteCtx] = useState<{ ids: number[]; mode: 'single' | 'bulk' } | null>(null);
 
   const statusOptions = useMemo(() => [
     { value: 'new', label: 'new' }, { value: 'contacted', label: 'contacted' },
@@ -138,15 +139,20 @@ export function App() {
     { value: 'delete', label: 'delete' },
   ], []);
 
-  async function loadLeads() {
+  async function loadLeads(pageOverride?: number) {
     setLoading(true);
     const params = new URLSearchParams();
     if (q) params.set('q', q);
     if (minScore > 0) params.set('minScore', String(minScore));
     if (status) params.set('status', status);
     if (lockedOnly) params.set('locked', '1');
-    params.set('page', String(page));
+    const activePage = pageOverride ?? page;
+    params.set('page', String(activePage));
     params.set('pageSize', '50');
+    const sortMap: Record<string, string> = {
+      id: 'id', name: 'name', score: 'score', lead_status: 'status', owner: 'owner', vertical: 'vertical', created_at: 'created', updated_at: 'updated'
+    };
+    params.set('sort', `${sortMap[sortKey] || 'updated'}_${sortDir}`);
     const r = await fetch(`/api/leads?${params.toString()}`);
     const j = await r.json();
     setRows(j.rows || []); setTotalPages(j.totalPages || 1); setTotalRows(j.total || 0); setLoading(false);
@@ -156,8 +162,21 @@ export function App() {
   async function loadDashboard() { const r = await fetch('/api/dashboard'); setDash(await r.json()); }
   async function loadEnrich() { const r = await fetch('/api/enrich/queue'); setEnrich(await r.json()); }
 
-  useEffect(() => { loadLeads(); }, [page]);
   useEffect(() => { if (tab === 'dashboard') loadDashboard(); if (tab === 'enrich') loadEnrich(); if (tab === 'leads') loadLeads(); }, [tab]);
+
+  useEffect(() => {
+    if (tab !== 'leads') return;
+    const h = window.setTimeout(() => {
+      setPage(1);
+      loadLeads(1);
+    }, 320);
+    return () => window.clearTimeout(h);
+  }, [q, minScore, status, lockedOnly, sortKey, sortDir, tab]);
+
+  useEffect(() => {
+    if (tab !== 'leads') return;
+    loadLeads();
+  }, [page]);
 
   useEffect(() => {
     fetch('/api/auth/me').then(r => r.ok ? r.json() : null).then(j => setMe(j?.user || null)).catch(() => setMe(null));
@@ -174,8 +193,8 @@ export function App() {
   async function applyBulk() {
     if (!bulkAction || selectedIds.size === 0) return;
     if (bulkAction === 'delete') {
-      const ok = window.confirm(`${t.delete} ${selectedIds.size} items?`);
-      if (!ok) return;
+      setDeleteCtx({ ids: [...selectedIds], mode: 'bulk' });
+      return;
     }
     await fetch('/api/bulk', {
       method: 'POST',
@@ -197,7 +216,6 @@ export function App() {
       setQ(''); setMinScore(0); setStatus(null); setLockedOnly(false);
     }
     setPage(1);
-    setTimeout(loadLeads, 0);
   }
 
 
@@ -222,7 +240,6 @@ export function App() {
     if (!v) return;
     setQ(v.q); setMinScore(v.minScore); setStatus(v.status); setLockedOnly(v.lockedOnly);
     setPage(1);
-    setTimeout(loadLeads, 0);
   }
 
   function deleteSavedView() {
@@ -249,11 +266,23 @@ export function App() {
   }
 
 
-  async function deleteOne(id: number) {
-    const ok = window.confirm(t.deleteConfirm);
-    if (!ok) return;
-    await fetch(`/api/leads/${id}`, { method: 'DELETE' });
-    markRecentEdited([id]);
+  function requestDeleteOne(id: number) {
+    setDeleteCtx({ ids: [id], mode: 'single' });
+  }
+
+  async function confirmDelete() {
+    if (!deleteCtx) return;
+    if (deleteCtx.mode === 'single') {
+      await fetch(`/api/leads/${deleteCtx.ids[0]}`, { method: 'DELETE' });
+    } else {
+      await fetch('/api/bulk', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: deleteCtx.ids.join(','), action: 'delete' }),
+      });
+    }
+    markRecentEdited(deleteCtx.ids);
+    setDeleteCtx(null);
     await Promise.all([loadLeads(), loadDashboard()]);
   }
 
@@ -371,8 +400,7 @@ export function App() {
                   </Box>
                   <Select w={170} placeholder={t.status} data={statusOptions} value={status} onChange={setStatus} clearable />
                   <Select w={160} data={[{ value: '0', label: 'All' }, { value: '1', label: t.lockOnly }]} value={lockedOnly ? '1' : '0'} onChange={(v) => setLockedOnly(v === '1')} />
-                  <Button loading={loading} onClick={() => { setPage(1); loadLeads(); }}>{t.filter}</Button>
-                  <Button variant="default" onClick={() => { setQ(''); setMinScore(0); setStatus(null); setLockedOnly(false); setPage(1); setTimeout(loadLeads, 0); }}>{t.reset}</Button>
+                  <Button variant="default" onClick={() => { setQ(''); setMinScore(0); setStatus(null); setLockedOnly(false); setPage(1); }}>{t.reset}</Button>
                 </Group>
 
                 <Group mt="sm" mb={2} justify="space-between" wrap="wrap">
@@ -393,7 +421,7 @@ export function App() {
                 </Group>
 
                 <Group mt="sm" justify="space-between" wrap="wrap">
-                  <Text size="sm" c="dimmed">{t.total}: {totalRows} · {t.page}: {page}/{totalPages}</Text>
+                  <Text size="sm" c="dimmed">{t.total}: {totalRows} · {t.page}: {page}/{totalPages}{loading ? ' · loading…' : ''}</Text>
                   <Group>
                     <Badge variant="light">{t.selected}: {selectedIds.size}</Badge>
                     <Select w={190} placeholder={t.bulkAction} data={bulkOptions} value={bulkAction} onChange={setBulkAction} clearable />
@@ -412,7 +440,7 @@ export function App() {
                           setSelectedIds(v ? new Set(sortedRows.map(r => r.id)) : new Set());
                         }} /></Table.Th>
                         <SortHead label="ID" k="id" w={64} /><SortHead label="Name" k="name" /><SortHead label="Score" k="score" w={88} /><SortHead label="Status" k="lead_status" /><SortHead label="Owner" k="owner" />
-                        <Table.Th>Locked</Table.Th><SortHead label="Vertical" k="vertical" /><SortHead label="CreatedAt" k="created_at" w={122} /><SortHead label="UpdatedAt" k="updated_at" w={122} /><Table.Th w={96}>Action</Table.Th><Table.Th style={{ width: 420, minWidth: 420, maxWidth: 420 }}>Reason</Table.Th>
+                        <Table.Th style={thStyle}>Locked</Table.Th><SortHead label="Vertical" k="vertical" /><SortHead label="CreatedAt" k="created_at" w={122} /><SortHead label="UpdatedAt" k="updated_at" w={122} /><Table.Th w={96} style={thStyle}>Action</Table.Th><Table.Th style={{ ...thStyle, width: 420, minWidth: 420, maxWidth: 420 }}>Reason</Table.Th>
                       </Table.Tr>
                     </Table.Thead>
                     <Table.Tbody>
@@ -436,7 +464,7 @@ export function App() {
                           <Table.Td>{r.vertical}</Table.Td>
                           <Table.Td style={{ whiteSpace: 'nowrap' }}>{(r.created_at || '').slice(0, 10)}</Table.Td>
                           <Table.Td style={{ whiteSpace: 'nowrap' }}>{(r.updated_at || '').slice(0, 10)}</Table.Td>
-                          <Table.Td><Group gap={6}><ActionIcon variant="light" color="blue" onClick={() => setSelected({ ...r })} title={t.edit}><IconEdit size={14} /></ActionIcon><ActionIcon variant="light" color="red" onClick={() => deleteOne(r.id)} title={t.delete}><IconTrash size={14} /></ActionIcon></Group></Table.Td>
+                          <Table.Td><Group gap={6}><ActionIcon variant="light" color="blue" onClick={() => setSelected({ ...r })} title={t.edit}><IconEdit size={14} /></ActionIcon><ActionIcon variant="light" color="red" onClick={() => requestDeleteOne(r.id)} title={t.delete}><IconTrash size={14} /></ActionIcon></Group></Table.Td>
                           <Table.Td style={{ width: 420, minWidth: 420, maxWidth: 420 }}>
                             <Tooltip multiline w={560} withArrow label={r.tidb_potential_reason || '-'}>
                               <Text size="sm" lineClamp={1}>{r.tidb_potential_reason || ''}</Text>
@@ -500,11 +528,23 @@ export function App() {
             <Select label="Status" data={statusOptions} value={selected.lead_status} onChange={(v) => setSelected({ ...selected, lead_status: v || 'new' })} />
             <TextInput label="Owner" value={selected.owner || ''} onChange={(e) => setSelected({ ...selected, owner: e.currentTarget.value })} />
             <NumberInput label="Score" min={0} max={100} value={selected.tidb_potential_score ?? 0} onChange={(v: any) => setSelected({ ...selected, tidb_potential_score: Number(v) })} />
-            <Textarea label="Reason" minRows={12} autosize value={selected.tidb_potential_reason || ''} onChange={(e) => setSelected({ ...selected, tidb_potential_reason: e.currentTarget.value })} />
+            <Textarea label="Reason" minRows={14} maxRows={14} autosize value={selected.tidb_potential_reason || ''} onChange={(e) => setSelected({ ...selected, tidb_potential_reason: e.currentTarget.value })} />
             <Button onClick={saveLead}>{t.saveLock}</Button>
           </Stack>
         )}
       </Modal>
+
+      <Modal opened={!!deleteCtx} onClose={() => setDeleteCtx(null)} title={t.deleteModalTitle} centered>
+        <Stack>
+          <Text>{t.deleteModalDesc}</Text>
+          <Text size="sm" c="dimmed">{deleteCtx?.mode === 'bulk' ? `${deleteCtx.ids.length} items selected.` : t.deleteConfirm}</Text>
+          <Group justify="flex-end">
+            <Button variant="default" onClick={() => setDeleteCtx(null)}>{t.cancel}</Button>
+            <Button color="red" onClick={confirmDelete}>{t.confirmDelete}</Button>
+          </Group>
+        </Stack>
+      </Modal>
+
     </AppShell>
   );
 }
