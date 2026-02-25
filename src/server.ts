@@ -12,6 +12,7 @@ type LeadReq = Request & { lang?: Lang; t?: any };
 app.set('view engine', 'ejs');
 app.set('views', 'views');
 app.use(express.urlencoded({ extended: true }));
+app.use(express.json());
 app.use(express.static('public'));
 
 app.use((req: LeadReq, _res: Response, next: NextFunction) => {
@@ -29,6 +30,74 @@ async function logActivity(conn: any, leadId: number, action: string, actor = 'p
     );
   } catch {}
 }
+
+
+
+app.get('/api/leads', async (req: Request, res: Response) => {
+  const q = (String(req.query.q || '')).trim();
+  const min = Number(req.query.minScore || 0);
+  const status = String(req.query.status || '').trim();
+  const sort = String(req.query.sort || 'score_desc').trim();
+  const page = Math.max(1, Number(req.query.page || 1));
+  const pageSize = Math.min(200, Math.max(10, Number(req.query.pageSize || 50)));
+
+  const conn = await getConn();
+  let where = ' WHERE 1=1';
+  const args: any[] = [];
+  if (q) { where += ' AND (name LIKE ? OR vertical LIKE ? OR source LIKE ? OR tags LIKE ?)'; args.push(`%${q}%`,`%${q}%`,`%${q}%`,`%${q}%`); }
+  if (min > 0) { where += ' AND IFNULL(tidb_potential_score,0) >= ?'; args.push(min); }
+  if (status) { where += ' AND lead_status=?'; args.push(status); }
+
+  const sortMap: Record<string,string> = {
+    score_desc: 'IFNULL(tidb_potential_score,0) DESC, updated_at DESC',
+    score_asc: 'IFNULL(tidb_potential_score,0) ASC, updated_at DESC',
+    updated_desc: 'updated_at DESC',
+    updated_asc: 'updated_at ASC',
+    name_asc: 'name ASC',
+    name_desc: 'name DESC'
+  };
+  const orderBy = sortMap[sort] || sortMap.score_desc;
+
+  const [countRows]: any = await conn.query(`SELECT COUNT(*) c FROM \`${TABLE}\` ${where}`, args);
+  const total = Number((countRows?.[0]?.c) || 0);
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const safePage = Math.min(page, totalPages);
+  const offset = (safePage - 1) * pageSize;
+
+  const [rows] = await conn.query(
+    `SELECT id,name,region,vertical,funding,linkedin,latest_news,source,tidb_potential_score,tidb_potential_reason,manual_locked,manual_note,lead_status,owner,tags,source_confidence,enrich_status,created_at,updated_at FROM \`${TABLE}\` ${where} ORDER BY ${orderBy} LIMIT ? OFFSET ?`,
+    [...args, pageSize, offset]
+  );
+  await conn.end();
+  res.json({ rows, total, page: safePage, totalPages, pageSize });
+});
+
+app.get('/api/leads/:id', async (req: Request, res: Response) => {
+  const conn = await getConn();
+  const [rows]: any = await conn.query(`SELECT * FROM \`${TABLE}\` WHERE id=?`, [req.params.id]);
+  await conn.end();
+  if (!rows?.[0]) return res.status(404).json({ error: 'Not found' });
+  res.json(rows[0]);
+});
+
+app.put('/api/leads/:id', async (req: Request, res: Response) => {
+  const b: any = req.body || {};
+  const conn = await getConn();
+  const [beforeRows]: any = await conn.query(`SELECT * FROM \`${TABLE}\` WHERE id=?`, [req.params.id]);
+  const beforeRow = beforeRows?.[0] || null;
+
+  await conn.execute(
+    `UPDATE \`${TABLE}\` SET
+      name=?, vertical=?, lead_status=?, tidb_potential_score=?, tidb_potential_reason=?,
+      manual_locked=1, manual_updated_at=NOW(), updated_at=NOW()
+     WHERE id=?`,
+    [b.name || '', b.vertical || '', b.lead_status || 'new', b.tidb_potential_score || null, b.tidb_potential_reason || '', req.params.id]
+  );
+  await logActivity(conn, Number(req.params.id), 'api_manual_edit_lock', 'pingcomp-react', beforeRow, b);
+  const [rows]: any = await conn.query(`SELECT * FROM \`${TABLE}\` WHERE id=?`, [req.params.id]);
+  await conn.end();
+  res.json({ ok: true, row: rows?.[0] || null });
+});
 
 app.get('/enrich', async (req: LeadReq, res: Response) => {
   const conn = await getConn();
@@ -267,6 +336,9 @@ app.get('/export.csv', async (req: Request, res: Response) => {
   res.setHeader('Content-Disposition', 'attachment; filename="pingcomp_export.csv"');
   res.send(csv);
 });
+
+app.use('/app', express.static('web/dist'));
+app.get('/app/*', (_req: Request, res: Response) => res.sendFile(process.cwd() + '/web/dist/index.html'));
 
 await migrate();
 app.listen(port, () => {
