@@ -33,7 +33,7 @@ async function logActivity(conn, leadId, action, actor='pingcomp-ui', beforeObj=
 
 
 
-app.get('/enrich', async (_req, res) => {
+app.get('/enrich', async (req, res) => {
   const conn = await getConn();
   const [rows] = await conn.query(`
     SELECT q.id, q.lead_id, q.status, q.attempts, q.last_error, q.updated_at, c.name, c.enrich_status
@@ -110,7 +110,7 @@ app.post('/enrich/retry/:id', async (req, res) => {
 
 
 
-app.get('/activity', async (_req, res) => {
+app.get('/activity', async (req, res) => {
   const conn = await getConn();
   const [rows] = await conn.query(`
     SELECT a.id, a.lead_id, c.name, a.action, a.actor, a.created_at
@@ -123,11 +123,11 @@ app.get('/activity', async (_req, res) => {
   res.render('activity', { rows, lang: req.lang, t: req.t });
 });
 
-app.get('/export', async (_req, res) => {
+app.get('/export', async (req, res) => {
   res.render('export', { lang: req.lang, t: req.t });
 });
 
-app.get('/dashboard', async (_req, res) => {
+app.get('/dashboard', async (req, res) => {
   const conn = await getConn();
   const [[tot]] = await conn.query(`SELECT COUNT(*) c FROM \`${TABLE}\``);
   const [[locked]] = await conn.query(`SELECT COUNT(*) c FROM \`${TABLE}\` WHERE manual_locked=1`);
