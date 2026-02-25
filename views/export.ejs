@@ -1,0 +1,13 @@
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>PingComp · Export Center</title><link rel="stylesheet" href="/styles.css"><script src="/theme.js"></script></head>
+<body><div class="container">
+<div class="header"><div class="brand"><img src="/logo.svg" class="logo" alt="logo"><div><h1>Export Center</h1><p>按策略导出客户数据</p></div></div><a class="btn" href="/">返回Leads</a></div>
+<div class="card" style="padding:16px;display:grid;gap:10px;max-width:820px;">
+  <form method="get" action="/export.csv" class="edit-grid">
+    <label class="field"><span>Minimum Score</span><input class="input" type="number" name="minScore" min="0" max="100" value="70"></label>
+    <label class="field"><span>Status</span><select class="input" name="status"><option value="">all</option><option>new</option><option>contacted</option><option>qualified</option><option>disqualified</option></select></label>
+    <label class="field full"><span><input type="checkbox" name="locked" value="1"> Only manual locked records</span></label>
+    <div class="field full"><button class="btn primary" type="submit">下载 CSV</button></div>
+  </form>
+  <p class="muted">说明：此导出会带上评分、状态、owner、tags、manual锁定等字段，便于CRM导入。</p>
+</div>
+</div></body></html>

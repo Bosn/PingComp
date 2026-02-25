@@ -23,3 +23,15 @@ Open: http://localhost:3788
 - MySQL is source of truth.
 - Rows manually edited in PingComp are marked `manual_locked=1`.
 - Upstream writer (PingAICustomers) must respect manual lock in upsert logic.
+
+
+## New modules (M1~M6)
+- Dashboard: `/dashboard`
+- Leads v2: `/` (advanced filters, sort, pagination, bulk)
+- Enrichment Queue: `/enrich`
+- Activity Log: `/activity`
+- Export Center: `/export`
+
+## Manual-governance guarantee
+- Manual edits set `manual_locked=1`.
+- Upstream sync must respect lock and never overwrite locked records.

@@ -20,6 +20,16 @@ app.use((req, _res, next) => {
 });
 
 
+async function logActivity(conn, leadId, action, actor='pingcomp-ui', beforeObj=null, afterObj=null) {
+  try {
+    await conn.execute(
+      `INSERT INTO lead_activity_log (lead_id, action, actor, before_json, after_json) VALUES (?, ?, ?, ?, ?)`,
+      [leadId, action, actor, beforeObj ? JSON.stringify(beforeObj) : null, afterObj ? JSON.stringify(afterObj) : null]
+    );
+  } catch {}
+}
+
+
 
 
 
@@ -56,6 +66,7 @@ app.post('/enrich/enqueue', async (req, res) => {
        ON DUPLICATE KEY UPDATE updated_at=CURRENT_TIMESTAMP`,
       [id]
     );
+    await logActivity(conn, id, 'enrich_enqueue');
   }
   await conn.end();
   res.redirect('/enrich');
@@ -78,9 +89,11 @@ app.post('/enrich/run', async (_req, res) => {
       // placeholder enrichment: mark as done, touch enrich_status/last_enriched_at
       await conn.execute(`UPDATE \`${TABLE}\` SET enrich_status='done', last_enriched_at=NOW() WHERE id=?`, [j.lead_id]);
       await conn.execute(`UPDATE lead_enrichment_queue SET status='done', last_error=NULL WHERE id=?`, [j.id]);
+      await logActivity(conn, j.lead_id, 'enrich_done');
     } catch (e) {
       await conn.execute(`UPDATE lead_enrichment_queue SET status='failed', last_error=? WHERE id=?`, [String(e.message || e).slice(0,800), j.id]);
       await conn.execute(`UPDATE \`${TABLE}\` SET enrich_status='failed' WHERE id=?`, [j.lead_id]);
+      await logActivity(conn, j.lead_id, 'enrich_failed');
     }
   }
 
@@ -93,6 +106,25 @@ app.post('/enrich/retry/:id', async (req, res) => {
   await conn.execute(`UPDATE lead_enrichment_queue SET status='pending', last_error=NULL WHERE id=?`, [req.params.id]);
   await conn.end();
   res.redirect('/enrich');
+});
+
+
+
+app.get('/activity', async (_req, res) => {
+  const conn = await getConn();
+  const [rows] = await conn.query(`
+    SELECT a.id, a.lead_id, c.name, a.action, a.actor, a.created_at
+    FROM lead_activity_log a
+    LEFT JOIN \`${TABLE}\` c ON c.id = a.lead_id
+    ORDER BY a.created_at DESC
+    LIMIT 500
+  `);
+  await conn.end();
+  res.render('activity', { rows, lang: req.lang, t: req.t });
+});
+
+app.get('/export', async (_req, res) => {
+  res.render('export', { lang: req.lang, t: req.t });
 });
 
 app.get('/dashboard', async (_req, res) => {
@@ -161,6 +193,7 @@ app.get('/edit/:id', async (req, res) => {
 app.post('/edit/:id', async (req, res) => {
   const b = req.body;
   const conn = await getConn();
+  const [[beforeRow]] = await conn.query(`SELECT * FROM \`${TABLE}\` WHERE id=?`, [req.params.id]);
   await conn.execute(
     `UPDATE \`${TABLE}\` SET
       name=?, region=?, vertical=?, funding=?, linkedin=?, latest_news=?, source=?,
@@ -169,6 +202,7 @@ app.post('/edit/:id', async (req, res) => {
     [b.name, b.region, b.vertical, b.funding, b.linkedin, b.latest_news, b.source,
       b.tidb_potential_score || null, b.tidb_potential_reason, b.manual_note, b.lead_status || 'new', b.owner || null, b.tags || null, b.source_confidence || null, b.enrich_status || 'pending', req.params.id]
   );
+  await logActivity(conn, Number(req.params.id), 'manual_edit_lock', 'pingcomp-ui', beforeRow, { name: b.name, lead_status: b.lead_status, owner: b.owner, score: b.tidb_potential_score });
   await conn.end();
   res.redirect('/');
 });
@@ -185,11 +219,14 @@ app.post('/bulk', async (req, res) => {
 
   if (action === 'lock') {
     await conn.query(`UPDATE \`${TABLE}\` SET manual_locked=1, manual_updated_at=NOW() WHERE id IN (${placeholders})`, ids);
+    for (const id of ids) await logActivity(conn, id, 'bulk_lock');
   } else if (action === 'unlock') {
     await conn.query(`UPDATE \`${TABLE}\` SET manual_locked=0 WHERE id IN (${placeholders})`, ids);
+    for (const id of ids) await logActivity(conn, id, 'bulk_unlock');
   } else if (action.startsWith('status:')) {
     const v = action.split(':', 2)[1] || 'new';
     await conn.query(`UPDATE \`${TABLE}\` SET lead_status=? WHERE id IN (${placeholders})`, [v, ...ids]);
+    for (const id of ids) await logActivity(conn, id, `bulk_status:${v}`);
   }
 
   await conn.end();
@@ -199,13 +236,22 @@ app.post('/bulk', async (req, res) => {
 app.post('/unlock/:id', async (req, res) => {
   const conn = await getConn();
   await conn.execute(`UPDATE \`${TABLE}\` SET manual_locked=0 WHERE id=?`, [req.params.id]);
+  await logActivity(conn, Number(req.params.id), 'unlock_single');
   await conn.end();
   res.redirect('/');
 });
 
-app.get('/export.csv', async (_req, res) => {
+app.get('/export.csv', async (req, res) => {
   const conn = await getConn();
-  const [rows] = await conn.query(`SELECT name,region,vertical,funding,linkedin,latest_news,source,tidb_potential_score,tidb_potential_reason,lead_status,owner,tags,source_confidence,enrich_status,manual_locked,manual_note,updated_at FROM \`${TABLE}\` ORDER BY IFNULL(tidb_potential_score,0) DESC`);
+  const min = Number(req.query.minScore || 0);
+  const onlyLocked = req.query.locked === '1';
+  const status = String(req.query.status || '').trim();
+  let where=' WHERE 1=1';
+  const args=[];
+  if (min>0){ where += ' AND IFNULL(tidb_potential_score,0) >= ?'; args.push(min);}
+  if (onlyLocked){ where += ' AND manual_locked=1'; }
+  if (status){ where += ' AND lead_status=?'; args.push(status); }
+  const [rows] = await conn.query(`SELECT name,region,vertical,funding,linkedin,latest_news,source,tidb_potential_score,tidb_potential_reason,lead_status,owner,tags,source_confidence,enrich_status,manual_locked,manual_note,updated_at FROM \`${TABLE}\` ${where} ORDER BY IFNULL(tidb_potential_score,0) DESC`, args);
   await conn.end();
   const headers = Object.keys(rows[0] || {
     name:'',region:'',vertical:'',funding:'',linkedin:'',latest_news:'',source:'',tidb_potential_score:'',tidb_potential_reason:'',manual_locked:'',manual_note:'',updated_at:''
