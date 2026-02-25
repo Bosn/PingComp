@@ -84,7 +84,7 @@ app.get('/auth/denied', (req: Request, res: Response) => {
     <p class="primary">${primary}</p>
     <p class="detail">${detail}</p>
     <div class="actions">
-      <a class="btn" href="/login">Sign in with @pingcap.com</a>
+      <a class="btn" href="/logout?returnTo=%2Flogin">Sign in with @pingcap.com</a>
       <a class="btn secondary" href="/logout">Log out</a>
     </div>
   </main>
@@ -129,6 +129,20 @@ const ensureAuth = (req: Request, res: Response, next: NextFunction) => {
 };
 
 app.get('/api/health', (_req: Request, res: Response) => res.json({ ok: true }));
+
+app.get('/login-pingcap', (req: Request, res: Response) => {
+  const reqOidc = (req as any).oidc;
+  const resOidc = (res as any).oidc;
+  const loginFn = reqOidc?.login || resOidc?.login;
+  if (!authEnabled || !loginFn) return res.redirect('/login');
+  return loginFn.call(reqOidc || resOidc, {
+    returnTo: '/app',
+    authorizationParams: {
+      prompt: 'login',
+      login_hint: '@pingcap.com',
+    },
+  });
+});
 app.get('/api/auth/me', ensureAuth, (req: Request, res: Response) => {
   const user = (req as any).oidc?.user || null;
   res.json({
