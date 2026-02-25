@@ -84,7 +84,7 @@ app.get('/auth/denied', (req: Request, res: Response) => {
     <p class="primary">${primary}</p>
     <p class="detail">${detail}</p>
     <div class="actions">
-      <a class="btn" href="/logout?returnTo=%2Flogin">Sign in with @pingcap.com</a>
+      <a class="btn" href="/login?connection=google-oauth2&prompt=login&login_hint=%40pingcap.com">Sign in with @pingcap.com</a>
       <a class="btn secondary" href="/logout">Log out</a>
     </div>
   </main>
