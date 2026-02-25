@@ -3,7 +3,7 @@ import {
   ActionIcon, AppShell, Avatar, Badge, Box, Button, Card, Checkbox, Divider, Group, Modal, NumberInput, Paper, ScrollArea, Select, Slider,
   SimpleGrid, Stack, Table, Tabs, Text, TextInput, Textarea, Title, Tooltip, useMantineColorScheme,
 } from '@mantine/core';
-import { IconActivity, IconArrowDown, IconArrowUp, IconBolt, IconBrain, IconEdit, IconFilter, IconGauge, IconMoonStars, IconSun, IconTrash, IconWorld } from '@tabler/icons-react';
+import { IconActivity, IconArrowDown, IconArrowUp, IconBolt, IconBrain, IconEdit, IconFilter, IconGauge, IconLock, IconMoonStars, IconSun, IconTrash, IconWorld } from '@tabler/icons-react';
 
 type Lead = {
   id: number; name: string; region?: string; vertical: string; source: string;
@@ -440,7 +440,7 @@ export function App() {
                           setSelectedIds(v ? new Set(sortedRows.map(r => r.id)) : new Set());
                         }} /></Table.Th>
                         <SortHead label="ID" k="id" w={64} /><SortHead label="Name" k="name" /><SortHead label="Score" k="score" w={88} /><SortHead label="Status" k="lead_status" /><SortHead label="Owner" k="owner" />
-                        <Table.Th style={thStyle}>Locked</Table.Th><SortHead label="Vertical" k="vertical" /><SortHead label="CreatedAt" k="created_at" w={122} /><SortHead label="UpdatedAt" k="updated_at" w={122} /><Table.Th w={96} style={thStyle}>Action</Table.Th><Table.Th style={{ ...thStyle, width: 420, minWidth: 420, maxWidth: 420 }}>Reason</Table.Th>
+                        <Table.Th w={56} style={thStyle}>Locked</Table.Th><SortHead label="Vertical" k="vertical" /><SortHead label="CreatedAt" k="created_at" w={122} /><SortHead label="UpdatedAt" k="updated_at" w={122} /><Table.Th w={96} style={thStyle}>Action</Table.Th><Table.Th style={{ ...thStyle, width: 420, minWidth: 420, maxWidth: 420 }}>Reason</Table.Th>
                       </Table.Tr>
                     </Table.Thead>
                     <Table.Tbody>
@@ -460,7 +460,7 @@ export function App() {
                           <Table.Td><Badge color={scoreColor(r.tidb_potential_score ?? 0)} style={{ minWidth: 36, justifyContent: 'center' }}>{r.tidb_potential_score ?? '-'}</Badge></Table.Td>
                           <Table.Td>{r.lead_status}</Table.Td>
                           <Table.Td>{r.owner || '-'}</Table.Td>
-                          <Table.Td>{r.manual_locked ? <Badge color="violet" variant="filled">LOCKED</Badge> : '-'}</Table.Td>
+                          <Table.Td>{r.manual_locked ? <Tooltip label="LOCKED" withArrow><ActionIcon variant="light" color="violet" size="sm"><IconLock size={13} /></ActionIcon></Tooltip> : '-'}</Table.Td>
                           <Table.Td>{r.vertical}</Table.Td>
                           <Table.Td style={{ whiteSpace: 'nowrap' }}>{(r.created_at || '').slice(0, 10)}</Table.Td>
                           <Table.Td style={{ whiteSpace: 'nowrap' }}>{(r.updated_at || '').slice(0, 10)}</Table.Td>
@@ -519,6 +519,13 @@ export function App() {
           </Tabs.Panel>
         </Tabs>
       </Stack>
+
+
+      <Group justify="center" mt="md" mb="xs">
+        <Text size="xs" c="dimmed">
+          Powered by <a href="https://tidbcloud.com" target="_blank" rel="noreferrer">TiDB Cloud</a> &amp; <a href="https://openclaw.ai" target="_blank" rel="noreferrer">OpenClaw</a>
+        </Text>
+      </Group>
 
       <Modal opened={!!selected} onClose={() => setSelected(null)} title={selected?.name || t.edit} size="lg">
         {selected && (
