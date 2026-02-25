@@ -350,6 +350,21 @@ app.get('/export.csv', (req: Request, res: Response) => {
   res.redirect('/api/export.csv' + qs);
 });
 
+// Auth callback error fallback (friendly UX instead of raw Bad Request)
+app.use((err: any, req: Request, res: Response, next: NextFunction) => {
+  const msg = String(err?.message || '');
+  const isAuthCallbackError = req.path === '/callback' ||
+    msg.includes('access_denied') ||
+    msg.includes('checks.state argument is missing') ||
+    msg.includes('id_token not present');
+
+  if (isAuthCallbackError) {
+    const safe = msg.replace(/[<>]/g, '') || 'Access denied';
+    return res.redirect(`/auth/denied?message=${encodeURIComponent(safe)}`);
+  }
+  return next(err);
+});
+
 await migrate();
 app.listen(port, () => {
   console.log(`PingComp running on http://localhost:${port}`);
