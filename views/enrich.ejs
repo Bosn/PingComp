@@ -10,7 +10,14 @@
 <div class="container">
   <div class="header">
     <div class="brand"><img src="/logo.svg" class="logo" alt="logo"><div><h1>Enrichment Queue</h1><p>队列、重试与状态管理</p></div></div>
-    <div style="display:flex;gap:8px"><a class="btn" href="/">Leads</a><a class="btn" href="/dashboard">Dashboard</a></div>
+    <div style="display:flex;gap:8px;align-items:center;">
+      <select class="input" style="width:110px" onchange="location.href='/enrich?lang='+this.value">
+        <option value="zh" <%= lang==='zh' ? 'selected' : '' %>>中文</option>
+        <option value="en" <%= lang==='en' ? 'selected' : '' %>>EN</option>
+      </select>
+      <select class="input" style="width:120px" onchange="setTheme(this.value)"><option value="system">system</option><option value="dark">dark</option><option value="light">light</option></select>
+      <a class="btn" href="/?lang=<%= lang %>">Leads</a><a class="btn" href="/dashboard?lang=<%= lang %>">Dashboard</a>
+    </div>
   </div>
 
   <div class="edit-grid">

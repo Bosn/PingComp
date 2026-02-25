@@ -7,7 +7,7 @@ dotenv.config();
 const app = express();
 const port = Number(process.env.PORT || 3788);
 
-type LeadReq = Request & { lang?: Lang; t?: (typeof messages)['zh'] };
+type LeadReq = Request & { lang?: Lang; t?: any };
 
 app.set('view engine', 'ejs');
 app.set('views', 'views');
@@ -100,7 +100,7 @@ app.post('/enrich/run', async (_req: Request, res: Response) => {
 app.post('/enrich/retry/:id', async (req: Request, res: Response) => {
   const conn = await getConn();
   await conn.execute(`UPDATE lead_enrichment_queue SET status='pending', last_error=NULL WHERE id=?`, [req.params.id]);
-  await conn:**CREATE YOURSELF**
+  await conn.end();
   res.redirect('/enrich');
 });
 
@@ -162,8 +162,8 @@ app.get('/', async (req: LeadReq, res: Response) => {
   };
   const orderBy = sortMap[sort] || sortMap.score_desc;
 
-  const [[countRow]]: any = await conn.query(`SELECT COUNT(*) c FROM \`${TABLE}\` ${where}`, args);
-  const total = Number(countRow.c || 0);
+  const [countRows]: any = await conn.query(`SELECT COUNT(*) c FROM \`${TABLE}\` ${where}`, args);
+  const total = Number((countRows?.[0]?.c) || 0);
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const safePage = Math.min(page, totalPages);
   const offset = (safePage - 1) * pageSize;
@@ -181,7 +181,8 @@ app.get('/', async (req: LeadReq, res: Response) => {
 
 app.get('/edit/:id', async (req: LeadReq, res: Response) => {
   const conn = await getConn();
-  const [[row]] = await conn.query(`SELECT * FROM \`${TABLE}\` WHERE id=?`, [req.params.id]);
+  const [rowRows]: any = await conn.query(`SELECT * FROM \`${TABLE}\` WHERE id=?`, [req.params.id]);
+  const row = rowRows?.[0];
   await conn.end();
   if (!row) return res.status(404).send('Not found');
   res.render('edit', { row, lang: req.lang, t: req.t });
@@ -190,7 +191,8 @@ app.get('/edit/:id', async (req: LeadReq, res: Response) => {
 app.post('/edit/:id', async (req: Request, res: Response) => {
   const b: any = req.body;
   const conn = await getConn();
-  const [[beforeRow]] = await conn.query(`SELECT * FROM \`${TABLE}\` WHERE id=?`, [req.params.id]);
+  const [beforeRows]: any = await conn.query(`SELECT * FROM \`${TABLE}\` WHERE id=?`, [req.params.id]);
+  const beforeRow = beforeRows?.[0] || null;
   await conn.execute(
     `UPDATE \`${TABLE}\` SET
       name=?, region=?, vertical=?, funding=?, linkedin=?, latest_news=?, source=?,
