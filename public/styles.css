@@ -63,7 +63,8 @@ tr:hover td { background: rgba(255,255,255,0.02); }
 .link:hover { text-decoration: underline; }
 .row-actions { display: flex; gap: 6px; flex-wrap: wrap; }
 .form-inline { display: inline; }
-.stats { display:flex; gap:12px; margin-top: 10px; color: var(--muted); font-size: 12px; }
+.stats { display:flex; gap:12px; margin-top: 8px; color: var(--muted); font-size: 12px; }
+.stats-inline { padding-left: 2px; margin-bottom: 8px; }
 .edit-grid { display:grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .field { display:flex; flex-direction:column; gap:6px; }
 .field.full { grid-column: 1 / -1; }

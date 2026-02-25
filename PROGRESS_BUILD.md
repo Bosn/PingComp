@@ -26,3 +26,10 @@ Expand PingComp into a full lead management platform with dashboard, enrichment 
 - Edit a lead => verify `manual_locked=1` and activity logs appended
 - Run bulk operations and enrichment => activity logs should record actions
 - Export CSV from Export Center with filters
+
+
+## 2026-02-24 hotfix notes
+- Fixed stats line alignment in filter card
+- Replaced zh/en buttons with language dropdown
+- Added CreatedAt/UpdatedAt columns on lead table
+- Migrated runtime from JS to TypeScript (tsx + tsconfig + typecheck)

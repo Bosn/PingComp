@@ -1,26 +1,27 @@
-import express from 'express';
+import express, { type Request, type Response, type NextFunction } from 'express';
 import dotenv from 'dotenv';
 import { getConn, migrate, TABLE } from './db.js';
-import { messages, pickLang } from './i18n/index.js';
+import { messages, pickLang, type Lang } from './i18n/index.js';
 
 dotenv.config();
 const app = express();
 const port = Number(process.env.PORT || 3788);
+
+type LeadReq = Request & { lang?: Lang; t?: (typeof messages)['zh'] };
 
 app.set('view engine', 'ejs');
 app.set('views', 'views');
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static('public'));
 
-app.use((req, _res, next) => {
+app.use((req: LeadReq, _res: Response, next: NextFunction) => {
   const lang = pickLang(String(req.query.lang || req.headers['x-lang'] || 'zh'));
   req.lang = lang;
   req.t = messages[lang] || messages.zh;
   next();
 });
 
-
-async function logActivity(conn, leadId, action, actor='pingcomp-ui', beforeObj=null, afterObj=null) {
+async function logActivity(conn: any, leadId: number, action: string, actor = 'pingcomp-ui', beforeObj: any = null, afterObj: any = null) {
   try {
     await conn.execute(
       `INSERT INTO lead_activity_log (lead_id, action, actor, before_json, after_json) VALUES (?, ?, ?, ?, ?)`,
@@ -29,11 +30,7 @@ async function logActivity(conn, leadId, action, actor='pingcomp-ui', beforeObj=
   } catch {}
 }
 
-
-
-
-
-app.get('/enrich', async (req, res) => {
+app.get('/enrich', async (req: LeadReq, res: Response) => {
   const conn = await getConn();
   const [rows] = await conn.query(`
     SELECT q.id, q.lead_id, q.status, q.attempts, q.last_error, q.updated_at, c.name, c.enrich_status
@@ -42,7 +39,7 @@ app.get('/enrich', async (req, res) => {
     ORDER BY q.updated_at DESC
     LIMIT 500
   `);
-  const [[stats]] = await conn.query(`
+  const [[stats]]: any = await conn.query(`
     SELECT
       SUM(status='pending') pending,
       SUM(status='running') running,
@@ -51,10 +48,10 @@ app.get('/enrich', async (req, res) => {
     FROM lead_enrichment_queue
   `);
   await conn.end();
-  res.render('enrich', { rows, stats: stats || {pending:0,running:0,done_count:0,failed:0}, lang: req.lang, t: req.t });
+  res.render('enrich', { rows, stats: stats || { pending: 0, running: 0, done_count: 0, failed: 0 }, lang: req.lang, t: req.t });
 });
 
-app.post('/enrich/enqueue', async (req, res) => {
+app.post('/enrich/enqueue', async (req: Request, res: Response) => {
   const idsRaw = String(req.body.ids || '').trim();
   const ids = idsRaw.split(',').map(x => Number(x.trim())).filter(n => Number.isFinite(n) && n > 0);
   if (!ids.length) return res.redirect('/enrich');
@@ -72,9 +69,9 @@ app.post('/enrich/enqueue', async (req, res) => {
   res.redirect('/enrich');
 });
 
-app.post('/enrich/run', async (_req, res) => {
+app.post('/enrich/run', async (_req: Request, res: Response) => {
   const conn = await getConn();
-  const [jobs] = await conn.query(`
+  const [jobs]: any = await conn.query(`
     SELECT q.id, q.lead_id, q.attempts, c.name, c.latest_news, c.linkedin, c.manual_locked
     FROM lead_enrichment_queue q
     JOIN \`${TABLE}\` c ON c.id=q.lead_id
@@ -86,12 +83,11 @@ app.post('/enrich/run', async (_req, res) => {
   for (const j of jobs) {
     try {
       await conn.execute(`UPDATE lead_enrichment_queue SET status='running', attempts=attempts+1 WHERE id=?`, [j.id]);
-      // placeholder enrichment: mark as done, touch enrich_status/last_enriched_at
       await conn.execute(`UPDATE \`${TABLE}\` SET enrich_status='done', last_enriched_at=NOW() WHERE id=?`, [j.lead_id]);
       await conn.execute(`UPDATE lead_enrichment_queue SET status='done', last_error=NULL WHERE id=?`, [j.id]);
       await logActivity(conn, j.lead_id, 'enrich_done');
-    } catch (e) {
-      await conn.execute(`UPDATE lead_enrichment_queue SET status='failed', last_error=? WHERE id=?`, [String(e.message || e).slice(0,800), j.id]);
+    } catch (e: any) {
+      await conn.execute(`UPDATE lead_enrichment_queue SET status='failed', last_error=? WHERE id=?`, [String(e?.message || e).slice(0, 800), j.id]);
       await conn.execute(`UPDATE \`${TABLE}\` SET enrich_status='failed' WHERE id=?`, [j.lead_id]);
       await logActivity(conn, j.lead_id, 'enrich_failed');
     }
@@ -101,16 +97,14 @@ app.post('/enrich/run', async (_req, res) => {
   res.redirect('/enrich');
 });
 
-app.post('/enrich/retry/:id', async (req, res) => {
+app.post('/enrich/retry/:id', async (req: Request, res: Response) => {
   const conn = await getConn();
   await conn.execute(`UPDATE lead_enrichment_queue SET status='pending', last_error=NULL WHERE id=?`, [req.params.id]);
-  await conn.end();
+  await conn:**CREATE YOURSELF**
   res.redirect('/enrich');
 });
 
-
-
-app.get('/activity', async (req, res) => {
+app.get('/activity', async (req: LeadReq, res: Response) => {
   const conn = await getConn();
   const [rows] = await conn.query(`
     SELECT a.id, a.lead_id, c.name, a.action, a.actor, a.created_at
@@ -123,39 +117,42 @@ app.get('/activity', async (req, res) => {
   res.render('activity', { rows, lang: req.lang, t: req.t });
 });
 
-app.get('/export', async (req, res) => {
+app.get('/export', async (req: LeadReq, res: Response) => {
   res.render('export', { lang: req.lang, t: req.t });
 });
 
-app.get('/dashboard', async (req, res) => {
+app.get('/dashboard', async (req: LeadReq, res: Response) => {
   const conn = await getConn();
-  const [[tot]] = await conn.query(`SELECT COUNT(*) c FROM \`${TABLE}\``);
-  const [[locked]] = await conn.query(`SELECT COUNT(*) c FROM \`${TABLE}\` WHERE manual_locked=1`);
-  const [[avgScore]] = await conn.query(`SELECT ROUND(AVG(IFNULL(tidb_potential_score,0)),1) score FROM \`${TABLE}\``);
+  const [[tot]]: any = await conn.query(`SELECT COUNT(*) c FROM \`${TABLE}\``);
+  const [[locked]]: any = await conn.query(`SELECT COUNT(*) c FROM \`${TABLE}\` WHERE manual_locked=1`);
+  const [[avgScore]]: any = await conn.query(`SELECT ROUND(AVG(IFNULL(tidb_potential_score,0)),1) score FROM \`${TABLE}\``);
   const [statusRows] = await conn.query(`SELECT lead_status, COUNT(*) c FROM \`${TABLE}\` GROUP BY lead_status ORDER BY c DESC`);
   const [topRows] = await conn.query(`SELECT id,name,tidb_potential_score,lead_status,manual_locked FROM \`${TABLE}\` ORDER BY IFNULL(tidb_potential_score,0) DESC LIMIT 12`);
   await conn.end();
   res.render('dashboard', { tot: tot.c, locked: locked.c, avgScore: avgScore.score || 0, statusRows, topRows, lang: req.lang, t: req.t });
 });
 
-app.get('/', async (req, res) => {
-  const q = (req.query.q || '').trim();
+app.get('/', async (req: LeadReq, res: Response) => {
+  const q = (String(req.query.q || '')).trim();
   const min = Number(req.query.minScore || 0);
   const onlyLocked = req.query.locked === '1';
-  const status = (req.query.status || '').trim();
-  const sort = (req.query.sort || 'score_desc').trim();
+  const status = String(req.query.status || '').trim();
+  const sort = String(req.query.sort || 'score_desc').trim();
   const page = Math.max(1, Number(req.query.page || 1));
   const pageSize = Math.min(200, Math.max(10, Number(req.query.pageSize || 50)));
 
   const conn = await getConn();
   let where = ' WHERE 1=1';
-  const args = [];
-  if (q) { where += ' AND (name LIKE ? OR vertical LIKE ? OR source LIKE ? OR tags LIKE ?)'; args.push(`%${q}%`,`%${q}%`,`%${q}%`,`%${q}%`); }
+  const args: any[] = [];
+  if (q) {
+    where += ' AND (name LIKE ? OR vertical LIKE ? OR source LIKE ? OR tags LIKE ?)';
+    args.push(`%${q}%`, `%${q}%`, `%${q}%`, `%${q}%`);
+  }
   if (min > 0) { where += ' AND IFNULL(tidb_potential_score,0) >= ?'; args.push(min); }
   if (onlyLocked) where += ' AND manual_locked=1';
   if (status) { where += ' AND lead_status=?'; args.push(status); }
 
-  const sortMap = {
+  const sortMap: Record<string, string> = {
     score_desc: 'IFNULL(tidb_potential_score,0) DESC, updated_at DESC',
     score_asc: 'IFNULL(tidb_potential_score,0) ASC, updated_at DESC',
     updated_desc: 'updated_at DESC',
@@ -165,14 +162,14 @@ app.get('/', async (req, res) => {
   };
   const orderBy = sortMap[sort] || sortMap.score_desc;
 
-  const [[countRow]] = await conn.query(`SELECT COUNT(*) c FROM \`${TABLE}\` ${where}`, args);
+  const [[countRow]]: any = await conn.query(`SELECT COUNT(*) c FROM \`${TABLE}\` ${where}`, args);
   const total = Number(countRow.c || 0);
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const safePage = Math.min(page, totalPages);
   const offset = (safePage - 1) * pageSize;
 
   const [rows] = await conn.query(
-    `SELECT id,name,region,vertical,funding,linkedin,latest_news,source,tidb_potential_score,tidb_potential_reason,manual_locked,manual_note,lead_status,owner,tags,source_confidence,enrich_status,updated_at FROM \`${TABLE}\` ${where} ORDER BY ${orderBy} LIMIT ? OFFSET ?`,
+    `SELECT id,name,region,vertical,funding,linkedin,latest_news,source,tidb_potential_score,tidb_potential_reason,manual_locked,manual_note,lead_status,owner,tags,source_confidence,enrich_status,created_at,updated_at FROM \`${TABLE}\` ${where} ORDER BY ${orderBy} LIMIT ? OFFSET ?`,
     [...args, pageSize, offset]
   );
 
@@ -182,7 +179,7 @@ app.get('/', async (req, res) => {
   res.render('index', { rows, q, min, onlyLocked, status, sort, page: safePage, pageSize, total, totalPages, statusRows, lang: req.lang, t: req.t });
 });
 
-app.get('/edit/:id', async (req, res) => {
+app.get('/edit/:id', async (req: LeadReq, res: Response) => {
   const conn = await getConn();
   const [[row]] = await conn.query(`SELECT * FROM \`${TABLE}\` WHERE id=?`, [req.params.id]);
   await conn.end();
@@ -190,8 +187,8 @@ app.get('/edit/:id', async (req, res) => {
   res.render('edit', { row, lang: req.lang, t: req.t });
 });
 
-app.post('/edit/:id', async (req, res) => {
-  const b = req.body;
+app.post('/edit/:id', async (req: Request, res: Response) => {
+  const b: any = req.body;
   const conn = await getConn();
   const [[beforeRow]] = await conn.query(`SELECT * FROM \`${TABLE}\` WHERE id=?`, [req.params.id]);
   await conn.execute(
@@ -207,8 +204,7 @@ app.post('/edit/:id', async (req, res) => {
   res.redirect('/');
 });
 
-
-app.post('/bulk', async (req, res) => {
+app.post('/bulk', async (req: Request, res: Response) => {
   const idsRaw = String(req.body.ids || '').trim();
   const action = String(req.body.action || '').trim();
   const ids = idsRaw.split(',').map(x => Number(x.trim())).filter(n => Number.isFinite(n) && n > 0);
@@ -233,7 +229,7 @@ app.post('/bulk', async (req, res) => {
   res.redirect('/');
 });
 
-app.post('/unlock/:id', async (req, res) => {
+app.post('/unlock/:id', async (req: Request, res: Response) => {
   const conn = await getConn();
   await conn.execute(`UPDATE \`${TABLE}\` SET manual_locked=0 WHERE id=?`, [req.params.id]);
   await logActivity(conn, Number(req.params.id), 'unlock_single');
@@ -241,27 +237,30 @@ app.post('/unlock/:id', async (req, res) => {
   res.redirect('/');
 });
 
-app.get('/export.csv', async (req, res) => {
+app.get('/export.csv', async (req: Request, res: Response) => {
   const conn = await getConn();
   const min = Number(req.query.minScore || 0);
   const onlyLocked = req.query.locked === '1';
   const status = String(req.query.status || '').trim();
-  let where=' WHERE 1=1';
-  const args=[];
-  if (min>0){ where += ' AND IFNULL(tidb_potential_score,0) >= ?'; args.push(min);}
-  if (onlyLocked){ where += ' AND manual_locked=1'; }
-  if (status){ where += ' AND lead_status=?'; args.push(status); }
-  const [rows] = await conn.query(`SELECT name,region,vertical,funding,linkedin,latest_news,source,tidb_potential_score,tidb_potential_reason,lead_status,owner,tags,source_confidence,enrich_status,manual_locked,manual_note,updated_at FROM \`${TABLE}\` ${where} ORDER BY IFNULL(tidb_potential_score,0) DESC`, args);
+  let where = ' WHERE 1=1';
+  const args: any[] = [];
+  if (min > 0) { where += ' AND IFNULL(tidb_potential_score,0) >= ?'; args.push(min); }
+  if (onlyLocked) { where += ' AND manual_locked=1'; }
+  if (status) { where += ' AND lead_status=?'; args.push(status); }
+  const [rows]: any = await conn.query(`SELECT name,region,vertical,funding,linkedin,latest_news,source,tidb_potential_score,tidb_potential_reason,lead_status,owner,tags,source_confidence,enrich_status,manual_locked,manual_note,created_at,updated_at FROM \`${TABLE}\` ${where} ORDER BY IFNULL(tidb_potential_score,0) DESC`, args);
   await conn.end();
+
   const headers = Object.keys(rows[0] || {
-    name:'',region:'',vertical:'',funding:'',linkedin:'',latest_news:'',source:'',tidb_potential_score:'',tidb_potential_reason:'',manual_locked:'',manual_note:'',updated_at:''
+    name: '', region: '', vertical: '', funding: '', linkedin: '', latest_news: '', source: '',
+    tidb_potential_score: '', tidb_potential_reason: '', lead_status: '', owner: '', tags: '',
+    source_confidence: '', enrich_status: '', manual_locked: '', manual_note: '', created_at: '', updated_at: ''
   });
-  const esc = (v) => {
+  const esc = (v: any) => {
     const s = String(v ?? '');
     if (/[",\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
     return s;
   };
-  const csv = [headers.join(','), ...rows.map(r => headers.map(h => esc(r[h])).join(','))].join('\n');
+  const csv = [headers.join(','), ...rows.map((r: any) => headers.map(h => esc(r[h])).join(','))].join('\n');
   res.setHeader('Content-Type', 'text/csv; charset=utf-8');
   res.setHeader('Content-Disposition', 'attachment; filename="pingcomp_export.csv"');
   res.send(csv);

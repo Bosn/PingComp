@@ -5,6 +5,8 @@ export const messages = {
     dashboard: 'Dashboard',
     leads: 'Leads',
     enrich: 'Enrich',
+    activity: 'Activity',
+    exportCenter: 'Export Center',
     exportCsv: '导出 CSV',
     filter: '筛选',
     reset: '重置',
@@ -20,6 +22,8 @@ export const messages = {
     dashboard: 'Dashboard',
     leads: 'Leads',
     enrich: 'Enrich',
+    activity: 'Activity',
+    exportCenter: 'Export Center',
     exportCsv: 'Export CSV',
     filter: 'Filter',
     reset: 'Reset',
@@ -29,8 +33,10 @@ export const messages = {
     edit: 'Edit',
     unlock: 'Unlock'
   }
-};
+} as const;
 
-export function pickLang(input) {
+export type Lang = 'zh' | 'en';
+
+export function pickLang(input: string | undefined): Lang {
   return input === 'en' ? 'en' : 'zh';
 }

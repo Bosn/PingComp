@@ -1,5 +1,6 @@
-import mysql from 'mysql2/promise';
+import mysql, { type Connection } from 'mysql2/promise';
 import dotenv from 'dotenv';
+
 dotenv.config();
 
 const host = process.env.MYSQL_HOST || process.env.DB_HOST;
@@ -17,30 +18,28 @@ if (!host || !user || !password || !database) {
 
 export const TABLE = table;
 
-export async function getConn() {
+export async function getConn(): Promise<Connection> {
   return mysql.createConnection({ host, port, user, password, database, charset: 'utf8mb4', ssl });
 }
 
-async function addColumn(conn, sql) {
+async function addColumn(conn: Connection, sql: string) {
   try { await conn.query(sql); } catch {}
 }
 
 export async function migrate() {
   const conn = await getConn();
   try {
+    await addColumn(conn, `ALTER TABLE \`${TABLE}\` ADD COLUMN created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP`);
     await addColumn(conn, `ALTER TABLE \`${TABLE}\` ADD COLUMN manual_locked TINYINT(1) NOT NULL DEFAULT 0`);
     await addColumn(conn, `ALTER TABLE \`${TABLE}\` ADD COLUMN manual_note TEXT NULL`);
     await addColumn(conn, `ALTER TABLE \`${TABLE}\` ADD COLUMN manual_updated_at TIMESTAMP NULL DEFAULT NULL`);
 
-    // M1 fields
     await addColumn(conn, `ALTER TABLE \`${TABLE}\` ADD COLUMN lead_status VARCHAR(32) NOT NULL DEFAULT 'new'`);
     await addColumn(conn, `ALTER TABLE \`${TABLE}\` ADD COLUMN owner VARCHAR(128) NULL`);
     await addColumn(conn, `ALTER TABLE \`${TABLE}\` ADD COLUMN tags VARCHAR(512) NULL`);
     await addColumn(conn, `ALTER TABLE \`${TABLE}\` ADD COLUMN source_confidence INT NULL`);
     await addColumn(conn, `ALTER TABLE \`${TABLE}\` ADD COLUMN enrich_status VARCHAR(32) NOT NULL DEFAULT 'pending'`);
     await addColumn(conn, `ALTER TABLE \`${TABLE}\` ADD COLUMN last_enriched_at TIMESTAMP NULL DEFAULT NULL`);
-
-
 
     await conn.query(`
       CREATE TABLE IF NOT EXISTS lead_enrichment_queue (
