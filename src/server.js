@@ -1,6 +1,7 @@
 import express from 'express';
 import dotenv from 'dotenv';
 import { getConn, migrate, TABLE } from './db.js';
+import { messages, pickLang } from './i18n/index.js';
 
 dotenv.config();
 const app = express();
@@ -10,6 +11,14 @@ app.set('view engine', 'ejs');
 app.set('views', 'views');
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static('public'));
+
+app.use((req, _res, next) => {
+  const lang = pickLang(String(req.query.lang || req.headers['x-lang'] || 'zh'));
+  req.lang = lang;
+  req.t = messages[lang] || messages.zh;
+  next();
+});
+
 
 
 
@@ -32,7 +41,7 @@ app.get('/enrich', async (_req, res) => {
     FROM lead_enrichment_queue
   `);
   await conn.end();
-  res.render('enrich', { rows, stats: stats || {pending:0,running:0,done_count:0,failed:0} });
+  res.render('enrich', { rows, stats: stats || {pending:0,running:0,done_count:0,failed:0}, lang: req.lang, t: req.t });
 });
 
 app.post('/enrich/enqueue', async (req, res) => {
@@ -94,7 +103,7 @@ app.get('/dashboard', async (_req, res) => {
   const [statusRows] = await conn.query(`SELECT lead_status, COUNT(*) c FROM \`${TABLE}\` GROUP BY lead_status ORDER BY c DESC`);
   const [topRows] = await conn.query(`SELECT id,name,tidb_potential_score,lead_status,manual_locked FROM \`${TABLE}\` ORDER BY IFNULL(tidb_potential_score,0) DESC LIMIT 12`);
   await conn.end();
-  res.render('dashboard', { tot: tot.c, locked: locked.c, avgScore: avgScore.score || 0, statusRows, topRows });
+  res.render('dashboard', { tot: tot.c, locked: locked.c, avgScore: avgScore.score || 0, statusRows, topRows, lang: req.lang, t: req.t });
 });
 
 app.get('/', async (req, res) => {
@@ -138,7 +147,7 @@ app.get('/', async (req, res) => {
   const [statusRows] = await conn.query(`SELECT lead_status, COUNT(*) c FROM \`${TABLE}\` GROUP BY lead_status ORDER BY c DESC`);
   await conn.end();
 
-  res.render('index', { rows, q, min, onlyLocked, status, sort, page: safePage, pageSize, total, totalPages, statusRows });
+  res.render('index', { rows, q, min, onlyLocked, status, sort, page: safePage, pageSize, total, totalPages, statusRows, lang: req.lang, t: req.t });
 });
 
 app.get('/edit/:id', async (req, res) => {
@@ -146,7 +155,7 @@ app.get('/edit/:id', async (req, res) => {
   const [[row]] = await conn.query(`SELECT * FROM \`${TABLE}\` WHERE id=?`, [req.params.id]);
   await conn.end();
   if (!row) return res.status(404).send('Not found');
-  res.render('edit', { row });
+  res.render('edit', { row, lang: req.lang, t: req.t });
 });
 
 app.post('/edit/:id', async (req, res) => {

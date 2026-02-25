@@ -73,3 +73,17 @@ textarea.input { min-height: 110px; resize: vertical; }
   .filters { grid-template-columns: 1fr 1fr; }
   .edit-grid { grid-template-columns: 1fr; }
 }
+
+:root.light, html.light {
+  --bg: #f4f7fb;
+  --panel: #ffffff;
+  --panel-2: #f7f9fd;
+  --text: #1b2a44;
+  --muted: #5d7295;
+  --line: #d9e3f1;
+  --primary: #2563eb;
+  --primary-2: #22d3ee;
+}
+html.light body {
+  background: radial-gradient(1200px 500px at 80% -10%, #dbeafe 0%, var(--bg) 55%);
+}
