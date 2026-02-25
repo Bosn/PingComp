@@ -24,6 +24,14 @@ type DashboardPayload = {
 type EnrichJob = { id: number; lead_id: number; status: string; attempts: number; last_error?: string; updated_at?: string; name?: string; enrich_status?: string; };
 type EnrichPayload = { rows: EnrichJob[]; stats: { pending: number; running: number; done_count: number; failed: number } };
 
+type SavedView = {
+  name: string;
+  q: string;
+  minScore: number | '';
+  status: string | null;
+  lockedOnly: boolean;
+};
+
 const I18N = {
   zh: {
     title: 'PingComp', subtitle: '潜在客户人工清洗与标注', dashboard: '仪表盘', leads: '线索管理', enrich: 'Enrich 队列',
@@ -31,7 +39,7 @@ const I18N = {
     lockOnly: '仅锁定', prev: '上一页', next: '下一页', edit: '编辑', saveLock: '保存并锁定', total: '总线索',
     locked: '人工锁定', avg: '平均分', lockRate: '锁定占比', exportCsv: '导出CSV', runBatch: '执行一轮(20条)',
     enqueue: '入队', noData: '暂无数据', trend7d: '近7天更新趋势', scoreDist: '评分分布', enrichDist: 'Enrich状态',
-    bulkAction: '批量动作', apply: '执行', selected: '已选', quickViews: '快捷视图',
+    bulkAction: '批量动作', apply: '执行', selected: '已选', quickViews: '快捷视图', savedViews: '已保存视图', saveView: '保存当前视图', deleteView: '删除视图', viewName: '视图名',
   },
   en: {
     title: 'PingComp', subtitle: 'Lead ops workspace', dashboard: 'Dashboard', leads: 'Leads', enrich: 'Enrich Queue',
@@ -39,7 +47,7 @@ const I18N = {
     page: 'Page', lockOnly: 'Locked only', prev: 'Prev', next: 'Next', edit: 'Edit', saveLock: 'Save & lock', total: 'Total leads',
     locked: 'Manual locked', avg: 'Avg score', lockRate: 'Lock ratio', exportCsv: 'Export CSV', runBatch: 'Run batch (20)',
     enqueue: 'Enqueue', noData: 'No data', trend7d: '7-day update trend', scoreDist: 'Score distribution', enrichDist: 'Enrich status',
-    bulkAction: 'Bulk action', apply: 'Apply', selected: 'Selected', quickViews: 'Quick views',
+    bulkAction: 'Bulk action', apply: 'Apply', selected: 'Selected', quickViews: 'Quick views', savedViews: 'Saved views', saveView: 'Save current view', deleteView: 'Delete view', viewName: 'View name',
   },
 } as const;
 
@@ -105,6 +113,12 @@ export function App() {
   const [enqueueIds, setEnqueueIds] = useState('');
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [bulkAction, setBulkAction] = useState<string | null>(null);
+  const [savedViews, setSavedViews] = useState<SavedView[]>(() => {
+    try { return JSON.parse(localStorage.getItem('pingcomp_saved_views') || '[]'); } catch { return []; }
+  });
+  const [selectedSavedView, setSelectedSavedView] = useState<string | null>(null);
+  const [newViewName, setNewViewName] = useState('');
+  const [recentEditedIds, setRecentEditedIds] = useState<Set<number>>(new Set());
 
   const statusOptions = useMemo(() => [
     { value: 'new', label: 'new' }, { value: 'contacted', label: 'contacted' },
@@ -145,6 +159,7 @@ export function App() {
     if (!selected) return;
     await fetch(`/api/leads/${selected.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(selected) });
     setSelected(null);
+    markRecentEdited([selected.id]);
     await Promise.all([loadLeads(), loadDashboard()]);
   }
 
@@ -155,6 +170,7 @@ export function App() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ids: [...selectedIds].join(','), action: bulkAction }),
     });
+    markRecentEdited([...selectedIds]);
     await Promise.all([loadLeads(), loadDashboard()]);
   }
 
@@ -170,6 +186,54 @@ export function App() {
     }
     setPage(1);
     setTimeout(loadLeads, 0);
+  }
+
+
+  function persistViews(next: SavedView[]) {
+    setSavedViews(next);
+    localStorage.setItem('pingcomp_saved_views', JSON.stringify(next));
+  }
+
+  function saveCurrentView() {
+    const name = newViewName.trim();
+    if (!name) return;
+    const view: SavedView = { name, q, minScore, status, lockedOnly };
+    const next = [view, ...savedViews.filter(v => v.name !== name)].slice(0, 12);
+    persistViews(next);
+    setSelectedSavedView(name);
+    setNewViewName('');
+  }
+
+  function applySavedView(name: string | null) {
+    setSelectedSavedView(name);
+    const v = savedViews.find(x => x.name === name);
+    if (!v) return;
+    setQ(v.q); setMinScore(v.minScore); setStatus(v.status); setLockedOnly(v.lockedOnly);
+    setPage(1);
+    setTimeout(loadLeads, 0);
+  }
+
+  function deleteSavedView() {
+    if (!selectedSavedView) return;
+    const next = savedViews.filter(v => v.name !== selectedSavedView);
+    persistViews(next);
+    setSelectedSavedView(null);
+  }
+
+  function markRecentEdited(ids: number[]) {
+    if (!ids.length) return;
+    setRecentEditedIds(prev => {
+      const n = new Set(prev);
+      ids.forEach(id => n.add(id));
+      return n;
+    });
+    window.setTimeout(() => {
+      setRecentEditedIds(prev => {
+        const n = new Set(prev);
+        ids.forEach(id => n.delete(id));
+        return n;
+      });
+    }, 120000);
   }
 
   async function runEnrichBatch() { await fetch('/api/enrich/run', { method: 'POST' }); await loadEnrich(); }
@@ -213,10 +277,10 @@ export function App() {
           <Tabs.Panel value="dashboard" pt="md">
             <Box px="xs">
               <SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }} spacing="md">
-                <Card withBorder shadow="sm" radius="md"><Text size="sm" c="dimmed">{t.total}</Text><Title order={3} fw={700}>{dash?.total ?? '-'}</Title></Card>
-                <Card withBorder shadow="sm" radius="md"><Text size="sm" c="dimmed">{t.locked}</Text><Title order={3} fw={700}>{dash?.locked ?? '-'}</Title></Card>
-                <Card withBorder shadow="sm" radius="md"><Text size="sm" c="dimmed">{t.avg}</Text><Title order={3} fw={700}>{dash?.avgScore ?? '-'}</Title></Card>
-                <Card withBorder shadow="sm" radius="md"><Text size="sm" c="dimmed">{t.lockRate}</Text><Title order={3} fw={700}>{dash?.total ? Math.round((dash.locked / dash.total) * 100) : 0}%</Title></Card>
+                <Card withBorder shadow="sm" radius="md" style={{ transition: 'transform .18s ease, box-shadow .18s ease' }}><Text size="sm" c="dimmed">{t.total}</Text><Title order={3} fw={700}>{dash?.total ?? '-'}</Title></Card>
+                <Card withBorder shadow="sm" radius="md" style={{ transition: 'transform .18s ease, box-shadow .18s ease' }}><Text size="sm" c="dimmed">{t.locked}</Text><Title order={3} fw={700}>{dash?.locked ?? '-'}</Title></Card>
+                <Card withBorder shadow="sm" radius="md" style={{ transition: 'transform .18s ease, box-shadow .18s ease' }}><Text size="sm" c="dimmed">{t.avg}</Text><Title order={3} fw={700}>{dash?.avgScore ?? '-'}</Title></Card>
+                <Card withBorder shadow="sm" radius="md" style={{ transition: 'transform .18s ease, box-shadow .18s ease' }}><Text size="sm" c="dimmed">{t.lockRate}</Text><Title order={3} fw={700}>{dash?.total ? Math.round((dash.locked / dash.total) * 100) : 0}%</Title></Card>
               </SimpleGrid>
 
               <SimpleGrid cols={{ base: 1, lg: 3 }} spacing="md" mt="md">
@@ -257,6 +321,13 @@ export function App() {
                     <Button size="compact-xs" variant="default" onClick={() => applyQuickView('followup')}>Follow-up</Button>
                     <Button size="compact-xs" variant="subtle" onClick={() => applyQuickView('all')}>All</Button>
                   </Group>
+                  <Group gap={6}>
+                    <Text size="xs" c="dimmed">{t.savedViews}</Text>
+                    <Select w={180} placeholder={t.savedViews} data={savedViews.map(v => ({ value: v.name, label: v.name }))} value={selectedSavedView} onChange={applySavedView} clearable />
+                    <TextInput w={140} placeholder={t.viewName} value={newViewName} onChange={(e) => setNewViewName(e.currentTarget.value)} />
+                    <Button size="compact-xs" variant="default" onClick={saveCurrentView}>{t.saveView}</Button>
+                    <Button size="compact-xs" variant="subtle" disabled={!selectedSavedView} onClick={deleteSavedView}>{t.deleteView}</Button>
+                  </Group>
                 </Group>
 
                 <Group mt="sm" justify="space-between" wrap="wrap">
@@ -286,7 +357,7 @@ export function App() {
                       {rows.length === 0 ? (
                         <Table.Tr><Table.Td colSpan={12}><Text c="dimmed" ta="center" py="md">{t.noData}</Text></Table.Td></Table.Tr>
                       ) : rows.map((r) => (
-                        <Table.Tr key={r.id}>
+                        <Table.Tr key={r.id} style={recentEditedIds.has(r.id) ? { background: 'rgba(34,197,94,0.12)', transition: 'background 220ms ease' } : { transition: 'background 220ms ease' }}>
                           <Table.Td>
                             <Checkbox checked={selectedIds.has(r.id)} onChange={(e) => {
                               const next = new Set(selectedIds);
@@ -348,7 +419,7 @@ export function App() {
                     </Table.Thead>
                     <Table.Tbody>
                       {(enrich?.rows || []).map((r) => (
-                        <Table.Tr key={r.id}><Table.Td>{r.id}</Table.Td><Table.Td>{r.lead_id}</Table.Td><Table.Td>{r.name || ''}</Table.Td><Table.Td>{r.status}</Table.Td><Table.Td>{r.attempts}</Table.Td><Table.Td>{r.updated_at || ''}</Table.Td></Table.Tr>
+                        <Table.Tr key={r.id} style={recentEditedIds.has(r.id) ? { background: 'rgba(34,197,94,0.12)', transition: 'background 220ms ease' } : { transition: 'background 220ms ease' }}><Table.Td>{r.id}</Table.Td><Table.Td>{r.lead_id}</Table.Td><Table.Td>{r.name || ''}</Table.Td><Table.Td>{r.status}</Table.Td><Table.Td>{r.attempts}</Table.Td><Table.Td>{r.updated_at || ''}</Table.Td></Table.Tr>
                       ))}
                     </Table.Tbody>
                   </Table>
