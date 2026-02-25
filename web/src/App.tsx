@@ -244,7 +244,7 @@ export function App() {
   return (
     <AppShell padding="md">
       <Stack gap="md">
-        <Paper withBorder p="md" radius="md" style={{ backdropFilter: 'blur(8px)', boxShadow: '0 0 40px rgba(64,128,255,0.08) inset' }}>
+        <Paper withBorder p="md" radius="md" style={{ backdropFilter: 'blur(8px)', boxShadow: '0 0 40px rgba(64,128,255,0.08) inset', borderColor: colorScheme === 'dark' ? 'rgba(120,140,180,0.45)' : undefined }}>
           <Group justify="space-between" align="center">
             <Group>
               <img src="/logo.svg" alt="PingComp" width={36} height={36} />
@@ -303,7 +303,7 @@ export function App() {
 
           <Tabs.Panel value="leads" pt="md">
             <Box px="xs">
-              <Paper withBorder p="md" radius="md">
+              <Paper withBorder p="md" radius="md" style={{ borderColor: colorScheme === 'dark' ? 'rgba(120,140,180,0.35)' : undefined }}>
                 <Group wrap="wrap" align="end">
                   <TextInput leftSection={<IconFilter size={14} />} w={320} placeholder={t.search} value={q} onChange={(e) => setQ(e.currentTarget.value)} />
                   <NumberInput w={140} placeholder={t.minScore} value={minScore} onChange={(v: any) => setMinScore(v ?? '')} min={0} max={100} allowNegative={false} />
@@ -342,7 +342,7 @@ export function App() {
                 <Divider my="sm" />
 
                 <ScrollArea>
-                  <Table striped highlightOnHover withTableBorder withColumnBorders miw={1560} verticalSpacing="sm">
+                  <Table striped highlightOnHover withTableBorder withColumnBorders miw={1560} verticalSpacing="sm" style={{ borderColor: colorScheme === 'dark' ? 'rgba(120,140,180,0.35)' : undefined }}>
                     <Table.Thead>
                       <Table.Tr>
                         <Table.Th w={46}><Checkbox checked={allChecked} onChange={(e) => {
@@ -370,7 +370,7 @@ export function App() {
                           <Table.Td><Badge color={scoreColor(r.tidb_potential_score ?? 0)} style={{ minWidth: 36, justifyContent: 'center' }}>{r.tidb_potential_score ?? '-'}</Badge></Table.Td>
                           <Table.Td>{r.lead_status}</Table.Td>
                           <Table.Td>{r.owner || '-'}</Table.Td>
-                          <Table.Td>{r.manual_locked ? 'LOCKED' : '-'}</Table.Td>
+                          <Table.Td>{r.manual_locked ? <Badge color="violet" variant="filled">LOCKED</Badge> : '-'}</Table.Td>
                           <Table.Td>{r.vertical}</Table.Td>
                           <Table.Td style={{ whiteSpace: 'nowrap' }}>{(r.created_at || '').slice(0, 10)}</Table.Td>
                           <Table.Td style={{ whiteSpace: 'nowrap' }}>{(r.updated_at || '').slice(0, 10)}</Table.Td>
