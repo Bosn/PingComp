@@ -257,10 +257,29 @@ app.post('/api/bulk', async (req: Request, res: Response) => {
     const v = action.split(':', 2)[1] || 'new';
     await conn.query(`UPDATE \`${TABLE}\` SET lead_status=? WHERE id IN (${placeholders})`, [v, ...ids]);
     for (const id of ids) await logActivity(conn, id, `bulk_status:${v}`);
+  } else if (action === 'delete') {
+    const [beforeRows]: any = await conn.query(`SELECT * FROM \`${TABLE}\` WHERE id IN (${placeholders})`, ids);
+    await conn.query(`DELETE FROM \`${TABLE}\` WHERE id IN (${placeholders})`, ids);
+    for (const row of (beforeRows || [])) await logActivity(conn, Number(row.id), 'bulk_delete', 'pingcomp-react', row, null);
   }
 
   await conn.end();
   res.json({ ok: true, updated: ids.length });
+});
+
+app.delete('/api/leads/:id', async (req: Request, res: Response) => {
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id) || id <= 0) return res.status(400).json({ ok: false, error: 'invalid id' });
+  const conn = await getConn();
+  const [[row]]: any = await conn.query(`SELECT * FROM \`${TABLE}\` WHERE id=?`, [id]);
+  if (!row) {
+    await conn.end();
+    return res.status(404).json({ ok: false, error: 'not found' });
+  }
+  await conn.query(`DELETE FROM \`${TABLE}\` WHERE id=?`, [id]);
+  await logActivity(conn, id, 'api_delete', 'pingcomp-react', row, null);
+  await conn.end();
+  return res.json({ ok: true, id });
 });
 
 app.get('/api/export.csv', async (req: Request, res: Response) => {

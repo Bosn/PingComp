@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
-  AppShell, Avatar, Badge, Box, Button, Card, Checkbox, Divider, Group, Modal, NumberInput, Paper, ScrollArea, Select,
+  ActionIcon, AppShell, Avatar, Badge, Box, Button, Card, Checkbox, Divider, Group, Modal, NumberInput, Paper, ScrollArea, Select,
   SimpleGrid, Stack, Table, Tabs, Text, TextInput, Textarea, Title, Tooltip, useMantineColorScheme,
 } from '@mantine/core';
-import { IconActivity, IconBolt, IconBrain, IconFilter, IconGauge, IconMoonStars, IconSun, IconWorld } from '@tabler/icons-react';
+import { IconActivity, IconArrowDown, IconArrowUp, IconBolt, IconBrain, IconEdit, IconFilter, IconGauge, IconMoonStars, IconSun, IconTrash, IconWorld } from '@tabler/icons-react';
 
 type Lead = {
   id: number; name: string; region?: string; vertical: string; source: string;
@@ -39,7 +39,7 @@ const I18N = {
     lockOnly: '仅锁定', prev: '上一页', next: '下一页', edit: '编辑', saveLock: '保存并锁定', total: '总线索',
     locked: '人工锁定', avg: '平均分', lockRate: '锁定占比', exportCsv: '导出CSV', runBatch: '执行一轮(20条)',
     enqueue: '入队', noData: '暂无数据', trend7d: '近7天更新趋势', scoreDist: '评分分布', enrichDist: 'Enrich状态',
-    bulkAction: '批量动作', apply: '执行', selected: '已选', quickViews: '快捷视图', savedViews: '已保存视图', saveView: '保存当前视图', deleteView: '删除视图', viewName: '视图名', account: '账户', logout: '退出',
+    bulkAction: '批量动作', apply: '执行', selected: '已选', quickViews: '快捷视图', savedViews: '已保存视图', saveView: '保存当前视图', deleteView: '删除视图', viewName: '视图名', account: '账户', logout: '退出', delete: '删除', deleteConfirm: '确认删除该线索？',
   },
   en: {
     title: 'PingComp', subtitle: 'Lead ops workspace', dashboard: 'Dashboard', leads: 'Leads', enrich: 'Enrich Queue',
@@ -47,7 +47,7 @@ const I18N = {
     page: 'Page', lockOnly: 'Locked only', prev: 'Prev', next: 'Next', edit: 'Edit', saveLock: 'Save & lock', total: 'Total leads',
     locked: 'Manual locked', avg: 'Avg score', lockRate: 'Lock ratio', exportCsv: 'Export CSV', runBatch: 'Run batch (20)',
     enqueue: 'Enqueue', noData: 'No data', trend7d: '7-day update trend', scoreDist: 'Score distribution', enrichDist: 'Enrich status',
-    bulkAction: 'Bulk action', apply: 'Apply', selected: 'Selected', quickViews: 'Quick views', savedViews: 'Saved views', saveView: 'Save current view', deleteView: 'Delete view', viewName: 'View name', account: 'Account', logout: 'Logout',
+    bulkAction: 'Bulk action', apply: 'Apply', selected: 'Selected', quickViews: 'Quick views', savedViews: 'Saved views', saveView: 'Save current view', deleteView: 'Delete view', viewName: 'View name', account: 'Account', logout: 'Logout', delete: 'Delete', deleteConfirm: 'Delete this lead?',
   },
 } as const;
 
@@ -120,6 +120,8 @@ export function App() {
   const [newViewName, setNewViewName] = useState('');
   const [recentEditedIds, setRecentEditedIds] = useState<Set<number>>(new Set());
   const [me, setMe] = useState<{ name?: string; email?: string; picture?: string } | null>(null);
+  const [sortKey, setSortKey] = useState<'id'|'name'|'score'|'lead_status'|'owner'|'vertical'|'created_at'|'updated_at'>('updated_at');
+  const [sortDir, setSortDir] = useState<'asc'|'desc'>('desc');
 
   const statusOptions = useMemo(() => [
     { value: 'new', label: 'new' }, { value: 'contacted', label: 'contacted' },
@@ -133,6 +135,7 @@ export function App() {
     { value: 'status:contacted', label: 'status:contacted' },
     { value: 'status:qualified', label: 'status:qualified' },
     { value: 'status:disqualified', label: 'status:disqualified' },
+    { value: 'delete', label: 'delete' },
   ], []);
 
   async function loadLeads() {
@@ -170,6 +173,10 @@ export function App() {
 
   async function applyBulk() {
     if (!bulkAction || selectedIds.size === 0) return;
+    if (bulkAction === 'delete') {
+      const ok = window.confirm(`${t.delete} ${selectedIds.size} items?`);
+      if (!ok) return;
+    }
     await fetch('/api/bulk', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -241,10 +248,50 @@ export function App() {
     }, 120000);
   }
 
+
+  async function deleteOne(id: number) {
+    const ok = window.confirm(t.deleteConfirm);
+    if (!ok) return;
+    await fetch(`/api/leads/${id}`, { method: 'DELETE' });
+    markRecentEdited([id]);
+    await Promise.all([loadLeads(), loadDashboard()]);
+  }
+
   async function runEnrichBatch() { await fetch('/api/enrich/run', { method: 'POST' }); await loadEnrich(); }
   async function enqueue() { await fetch('/api/enrich/enqueue', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids: enqueueIds }) }); setEnqueueIds(''); await loadEnrich(); }
 
-  const allChecked = rows.length > 0 && rows.every(r => selectedIds.has(r.id));
+  const sortedRows = useMemo(() => {
+    const arr = [...rows];
+    const val = (r: Lead) => {
+      if (sortKey === 'score') return Number(r.tidb_potential_score ?? -1);
+      if (sortKey === 'id') return Number(r.id);
+      if (sortKey === 'created_at' || sortKey === 'updated_at') return String((r as any)[sortKey] || '');
+      return String((r as any)[sortKey] || '').toLowerCase();
+    };
+    arr.sort((a, b) => {
+      const av: any = val(a), bv: any = val(b);
+      if (av < bv) return sortDir === 'asc' ? -1 : 1;
+      if (av > bv) return sortDir === 'asc' ? 1 : -1;
+      return 0;
+    });
+    return arr;
+  }, [rows, sortKey, sortDir]);
+
+  const setSort = (k: typeof sortKey) => {
+    if (sortKey === k) setSortDir(sortDir === 'asc' ? 'desc' : 'asc');
+    else { setSortKey(k); setSortDir('desc'); }
+  };
+
+  const SortHead = ({ label, k, w }: { label: string; k: typeof sortKey; w?: number }) => (
+    <Table.Th w={w}>
+      <Group gap={4} wrap="nowrap" style={{ cursor: 'pointer' }} onClick={() => setSort(k)}>
+        <Text size="sm" fw={600}>{label}</Text>
+        {sortKey === k ? (sortDir === 'asc' ? <IconArrowUp size={14} /> : <IconArrowDown size={14} />) : null}
+      </Group>
+    </Table.Th>
+  );
+
+  const allChecked = sortedRows.length > 0 && sortedRows.every(r => selectedIds.has(r.id));
 
   return (
     <AppShell padding="md">
@@ -359,10 +406,10 @@ export function App() {
                       <Table.Tr>
                         <Table.Th w={46}><Checkbox checked={allChecked} onChange={(e) => {
                           const v = e.currentTarget.checked;
-                          setSelectedIds(v ? new Set(rows.map(r => r.id)) : new Set());
+                          setSelectedIds(v ? new Set(sortedRows.map(r => r.id)) : new Set());
                         }} /></Table.Th>
-                        <Table.Th w={64}>ID</Table.Th><Table.Th>Name</Table.Th><Table.Th w={88}>Score</Table.Th><Table.Th>Status</Table.Th><Table.Th>Owner</Table.Th>
-                        <Table.Th>Locked</Table.Th><Table.Th>Vertical</Table.Th><Table.Th w={122}>CreatedAt</Table.Th><Table.Th w={122}>UpdatedAt</Table.Th><Table.Th w={84}>Action</Table.Th><Table.Th style={{ width: 420, minWidth: 420, maxWidth: 420 }}>Reason</Table.Th>
+                        <SortHead label="ID" k="id" w={64} /><SortHead label="Name" k="name" /><SortHead label="Score" k="score" w={88} /><SortHead label="Status" k="lead_status" /><SortHead label="Owner" k="owner" />
+                        <Table.Th>Locked</Table.Th><SortHead label="Vertical" k="vertical" /><SortHead label="CreatedAt" k="created_at" w={122} /><SortHead label="UpdatedAt" k="updated_at" w={122} /><Table.Th w={96}>Action</Table.Th><Table.Th style={{ width: 420, minWidth: 420, maxWidth: 420 }}>Reason</Table.Th>
                       </Table.Tr>
                     </Table.Thead>
                     <Table.Tbody>
@@ -386,7 +433,7 @@ export function App() {
                           <Table.Td>{r.vertical}</Table.Td>
                           <Table.Td style={{ whiteSpace: 'nowrap' }}>{(r.created_at || '').slice(0, 10)}</Table.Td>
                           <Table.Td style={{ whiteSpace: 'nowrap' }}>{(r.updated_at || '').slice(0, 10)}</Table.Td>
-                          <Table.Td><Button size="xs" onClick={() => setSelected({ ...r })}>{t.edit}</Button></Table.Td>
+                          <Table.Td><Group gap={6}><ActionIcon variant="light" color="blue" onClick={() => setSelected({ ...r })} title={t.edit}><IconEdit size={14} /></ActionIcon><ActionIcon variant="light" color="red" onClick={() => deleteOne(r.id)} title={t.delete}><IconTrash size={14} /></ActionIcon></Group></Table.Td>
                           <Table.Td style={{ width: 420, minWidth: 420, maxWidth: 420 }}>
                             <Tooltip multiline w={560} withArrow label={r.tidb_potential_reason || '-'}>
                               <Text size="sm" lineClamp={1}>{r.tidb_potential_reason || ''}</Text>
@@ -450,7 +497,7 @@ export function App() {
             <Select label="Status" data={statusOptions} value={selected.lead_status} onChange={(v) => setSelected({ ...selected, lead_status: v || 'new' })} />
             <TextInput label="Owner" value={selected.owner || ''} onChange={(e) => setSelected({ ...selected, owner: e.currentTarget.value })} />
             <NumberInput label="Score" min={0} max={100} value={selected.tidb_potential_score ?? 0} onChange={(v: any) => setSelected({ ...selected, tidb_potential_score: Number(v) })} />
-            <Textarea label="Reason" value={selected.tidb_potential_reason || ''} onChange={(e) => setSelected({ ...selected, tidb_potential_reason: e.currentTarget.value })} />
+            <Textarea label="Reason" minRows={12} autosize value={selected.tidb_potential_reason || ''} onChange={(e) => setSelected({ ...selected, tidb_potential_reason: e.currentTarget.value })} />
             <Button onClick={saveLead}>{t.saveLock}</Button>
           </Stack>
         )}
