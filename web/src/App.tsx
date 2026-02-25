@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
-  AppShell, Badge, Button, Card, Divider, Group, Modal, NumberInput, Paper, ScrollArea, Select,
+  AppShell, Badge, Box, Button, Card, Checkbox, Divider, Group, Modal, NumberInput, Paper, ScrollArea, Select,
   SimpleGrid, Stack, Table, Tabs, Text, TextInput, Textarea, Title, Tooltip, useMantineColorScheme,
 } from '@mantine/core';
 import { IconActivity, IconBolt, IconBrain, IconFilter, IconGauge, IconMoonStars, IconSun, IconWorld } from '@tabler/icons-react';
@@ -17,14 +17,30 @@ type DashboardPayload = {
   statusRows: Array<{ lead_status: string; c: number }>;
   topRows: Array<Pick<Lead, 'id' | 'name' | 'tidb_potential_score' | 'lead_status' | 'manual_locked'>>;
   dailyTrend?: Array<{ d: string; c: number }>;
+  scoreBuckets?: Array<{ bucket: string; c: number }>;
+  enrichRows?: Array<{ enrich_status: string; c: number }>;
 };
 
 type EnrichJob = { id: number; lead_id: number; status: string; attempts: number; last_error?: string; updated_at?: string; name?: string; enrich_status?: string; };
 type EnrichPayload = { rows: EnrichJob[]; stats: { pending: number; running: number; done_count: number; failed: number } };
 
 const I18N = {
-  zh: { title: 'PingComp', subtitle: '潜在客户人工清洗与标注', dashboard: '仪表盘', leads: '线索管理', enrich: 'Enrich 队列', filter: '筛选', reset: '重置', search: '搜索 name/vertical/source/tags', minScore: '最低分', status: '状态', page: '页码', lockOnly: '仅锁定', prev: '上一页', next: '下一页', edit: '编辑', saveLock: '保存并锁定', total: '总线索', locked: '人工锁定', avg: '平均分', lockRate: '锁定占比', exportCsv: '导出CSV', runBatch: '执行一轮(20条)', enqueue: '入队', noData: '暂无数据', trend7d: '近7天更新趋势' },
-  en: { title: 'PingComp', subtitle: 'Lead ops workspace', dashboard: 'Dashboard', leads: 'Leads', enrich: 'Enrich Queue', filter: 'Filter', reset: 'Reset', search: 'Search name/vertical/source/tags', minScore: 'Min score', status: 'Status', page: 'Page', lockOnly: 'Locked only', prev: 'Prev', next: 'Next', edit: 'Edit', saveLock: 'Save & lock', total: 'Total leads', locked: 'Manual locked', avg: 'Avg score', lockRate: 'Lock ratio', exportCsv: 'Export CSV', runBatch: 'Run batch (20)', enqueue: 'Enqueue', noData: 'No data', trend7d: '7-day update trend' },
+  zh: {
+    title: 'PingComp', subtitle: '潜在客户人工清洗与标注', dashboard: '仪表盘', leads: '线索管理', enrich: 'Enrich 队列',
+    filter: '筛选', reset: '重置', search: '搜索 name/vertical/source/tags', minScore: '最低分', status: '状态', page: '页码',
+    lockOnly: '仅锁定', prev: '上一页', next: '下一页', edit: '编辑', saveLock: '保存并锁定', total: '总线索',
+    locked: '人工锁定', avg: '平均分', lockRate: '锁定占比', exportCsv: '导出CSV', runBatch: '执行一轮(20条)',
+    enqueue: '入队', noData: '暂无数据', trend7d: '近7天更新趋势', scoreDist: '评分分布', enrichDist: 'Enrich状态',
+    bulkAction: '批量动作', apply: '执行', selected: '已选',
+  },
+  en: {
+    title: 'PingComp', subtitle: 'Lead ops workspace', dashboard: 'Dashboard', leads: 'Leads', enrich: 'Enrich Queue',
+    filter: 'Filter', reset: 'Reset', search: 'Search name/vertical/source/tags', minScore: 'Min score', status: 'Status',
+    page: 'Page', lockOnly: 'Locked only', prev: 'Prev', next: 'Next', edit: 'Edit', saveLock: 'Save & lock', total: 'Total leads',
+    locked: 'Manual locked', avg: 'Avg score', lockRate: 'Lock ratio', exportCsv: 'Export CSV', runBatch: 'Run batch (20)',
+    enqueue: 'Enqueue', noData: 'No data', trend7d: '7-day update trend', scoreDist: 'Score distribution', enrichDist: 'Enrich status',
+    bulkAction: 'Bulk action', apply: 'Apply', selected: 'Selected',
+  },
 } as const;
 
 function useLocalLang() {
@@ -45,9 +61,26 @@ function TrendSparkline({ data }: { data: Array<{ d: string; c: number }> }) {
   const d = data.map((x, i) => `${i === 0 ? 'M' : 'L'} ${sx(i)} ${sy(x.c)}`).join(' ');
   return (
     <svg width="100%" viewBox={`0 0 ${w} ${h}`} style={{ display: 'block' }}>
-      <path d={d} fill="none" stroke="currentColor" strokeWidth="2" opacity="0.9" />
+      <path d={d} fill="none" stroke="currentColor" strokeWidth="2.5" opacity="0.9" />
       {data.map((x, i) => <circle key={i} cx={sx(i)} cy={sy(x.c)} r="2.5" />)}
     </svg>
+  );
+}
+
+function HorizontalBars({ rows }: { rows: Array<{ k: string; v: number }> }) {
+  if (!rows.length) return <Text size="sm" c="dimmed">-</Text>;
+  const max = Math.max(...rows.map(r => r.v), 1);
+  return (
+    <Stack gap={8}>
+      {rows.map((r) => (
+        <Box key={r.k}>
+          <Group justify="space-between" mb={4}><Text size="sm">{r.k}</Text><Text size="sm" fw={600}>{r.v}</Text></Group>
+          <Box h={8} bg="dark.4" style={{ borderRadius: 999, overflow: 'hidden' }}>
+            <Box h="100%" w={`${Math.max(6, (r.v / max) * 100)}%`} bg="blue.6" style={{ borderRadius: 999 }} />
+          </Box>
+        </Box>
+      ))}
+    </Stack>
   );
 }
 
@@ -70,10 +103,21 @@ export function App() {
   const [dash, setDash] = useState<DashboardPayload | null>(null);
   const [enrich, setEnrich] = useState<EnrichPayload | null>(null);
   const [enqueueIds, setEnqueueIds] = useState('');
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [bulkAction, setBulkAction] = useState<string | null>(null);
 
   const statusOptions = useMemo(() => [
     { value: 'new', label: 'new' }, { value: 'contacted', label: 'contacted' },
     { value: 'qualified', label: 'qualified' }, { value: 'disqualified', label: 'disqualified' },
+  ], []);
+
+  const bulkOptions = useMemo(() => [
+    { value: 'lock', label: 'lock' },
+    { value: 'unlock', label: 'unlock' },
+    { value: 'status:new', label: 'status:new' },
+    { value: 'status:contacted', label: 'status:contacted' },
+    { value: 'status:qualified', label: 'status:qualified' },
+    { value: 'status:disqualified', label: 'status:disqualified' },
   ], []);
 
   async function loadLeads() {
@@ -88,6 +132,7 @@ export function App() {
     const r = await fetch(`/api/leads?${params.toString()}`);
     const j = await r.json();
     setRows(j.rows || []); setTotalPages(j.totalPages || 1); setTotalRows(j.total || 0); setLoading(false);
+    setSelectedIds(new Set());
   }
 
   async function loadDashboard() { const r = await fetch('/api/dashboard'); setDash(await r.json()); }
@@ -102,18 +147,31 @@ export function App() {
     setSelected(null);
     await Promise.all([loadLeads(), loadDashboard()]);
   }
+
+  async function applyBulk() {
+    if (!bulkAction || selectedIds.size === 0) return;
+    await fetch('/api/bulk', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids: [...selectedIds].join(','), action: bulkAction }),
+    });
+    await Promise.all([loadLeads(), loadDashboard()]);
+  }
+
   async function runEnrichBatch() { await fetch('/api/enrich/run', { method: 'POST' }); await loadEnrich(); }
   async function enqueue() { await fetch('/api/enrich/enqueue', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids: enqueueIds }) }); setEnqueueIds(''); await loadEnrich(); }
+
+  const allChecked = rows.length > 0 && rows.every(r => selectedIds.has(r.id));
 
   return (
     <AppShell padding="md">
       <Stack gap="md">
-        <Paper withBorder p="md" radius="md" style={{ backdropFilter: 'blur(8px)' }}>
+        <Paper withBorder p="md" radius="md" style={{ backdropFilter: 'blur(8px)', boxShadow: '0 0 40px rgba(64,128,255,0.08) inset' }}>
           <Group justify="space-between" align="center">
             <Group>
               <img src="/logo.svg" alt="PingComp" width={36} height={36} />
               <Stack gap={0}>
-                <Title order={2} fw={700}>{t.title}</Title>
+                <Title order={2} fw={800}>{t.title}</Title>
                 <Text size="sm" c="dimmed">{t.subtitle}</Text>
               </Stack>
             </Group>
@@ -139,116 +197,140 @@ export function App() {
           </Tabs.List>
 
           <Tabs.Panel value="dashboard" pt="md">
-            <SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }} spacing="md">
-              <Card withBorder shadow="sm" radius="md"><Text size="sm" c="dimmed">{t.total}</Text><Title order={3} fw={700}>{dash?.total ?? '-'}</Title></Card>
-              <Card withBorder shadow="sm" radius="md"><Text size="sm" c="dimmed">{t.locked}</Text><Title order={3} fw={700}>{dash?.locked ?? '-'}</Title></Card>
-              <Card withBorder shadow="sm" radius="md"><Text size="sm" c="dimmed">{t.avg}</Text><Title order={3} fw={700}>{dash?.avgScore ?? '-'}</Title></Card>
-              <Card withBorder shadow="sm" radius="md"><Text size="sm" c="dimmed">{t.lockRate}</Text><Title order={3} fw={700}>{dash?.total ? Math.round((dash.locked / dash.total) * 100) : 0}%</Title></Card>
-            </SimpleGrid>
+            <Box px="xs">
+              <SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }} spacing="md">
+                <Card withBorder shadow="sm" radius="md"><Text size="sm" c="dimmed">{t.total}</Text><Title order={3} fw={700}>{dash?.total ?? '-'}</Title></Card>
+                <Card withBorder shadow="sm" radius="md"><Text size="sm" c="dimmed">{t.locked}</Text><Title order={3} fw={700}>{dash?.locked ?? '-'}</Title></Card>
+                <Card withBorder shadow="sm" radius="md"><Text size="sm" c="dimmed">{t.avg}</Text><Title order={3} fw={700}>{dash?.avgScore ?? '-'}</Title></Card>
+                <Card withBorder shadow="sm" radius="md"><Text size="sm" c="dimmed">{t.lockRate}</Text><Title order={3} fw={700}>{dash?.total ? Math.round((dash.locked / dash.total) * 100) : 0}%</Title></Card>
+              </SimpleGrid>
 
-            <SimpleGrid cols={{ base: 1, lg: 2 }} spacing="md" mt="md">
-              <Card withBorder radius="md">
-                <Title order={4} mb="sm">Status distribution</Title>
-                {(dash?.statusRows || []).map((s) => (
-                  <Group key={s.lead_status} justify="space-between" py={6}><Text>{s.lead_status}</Text><Badge>{s.c}</Badge></Group>
-                ))}
-              </Card>
-              <Card withBorder radius="md">
-                <Title order={4} mb="sm">{t.trend7d}</Title>
-                <TrendSparkline data={dash?.dailyTrend || []} />
-                <Text size="xs" c="dimmed" mt={6}>{(dash?.dailyTrend || []).map(x => `${x.d.slice(5)}:${x.c}`).join(' · ')}</Text>
-              </Card>
-            </SimpleGrid>
+              <SimpleGrid cols={{ base: 1, lg: 3 }} spacing="md" mt="md">
+                <Card withBorder radius="md">
+                  <Title order={4} mb="sm">{t.trend7d}</Title>
+                  <TrendSparkline data={dash?.dailyTrend || []} />
+                  <Text size="xs" c="dimmed" mt={6}>{(dash?.dailyTrend || []).map(x => `${x.d.slice(5)}:${x.c}`).join(' · ')}</Text>
+                </Card>
+                <Card withBorder radius="md">
+                  <Title order={4} mb="sm">{t.scoreDist}</Title>
+                  <HorizontalBars rows={(dash?.scoreBuckets || []).map(x => ({ k: x.bucket, v: x.c }))} />
+                </Card>
+                <Card withBorder radius="md">
+                  <Title order={4} mb="sm">{t.enrichDist}</Title>
+                  <HorizontalBars rows={(dash?.enrichRows || []).map(x => ({ k: x.enrich_status || 'unknown', v: x.c }))} />
+                </Card>
+              </SimpleGrid>
+            </Box>
           </Tabs.Panel>
 
           <Tabs.Panel value="leads" pt="md">
-            <Paper withBorder p="md" radius="md">
-              <Group wrap="wrap" align="end">
-                <TextInput leftSection={<IconFilter size={14} />} w={320} placeholder={t.search} value={q} onChange={(e) => setQ(e.currentTarget.value)} />
-                <NumberInput w={140} placeholder={t.minScore} value={minScore} onChange={(v: any) => setMinScore(v ?? '')} min={0} max={100} allowNegative={false} />
-                <Select w={170} placeholder={t.status} data={statusOptions} value={status} onChange={setStatus} clearable />
-                <Select w={160} data={[{ value: '0', label: 'All' }, { value: '1', label: t.lockOnly }]} value={lockedOnly ? '1' : '0'} onChange={(v) => setLockedOnly(v === '1')} />
-                <Button loading={loading} onClick={() => { setPage(1); loadLeads(); }}>{t.filter}</Button>
-                <Button variant="default" onClick={() => { setQ(''); setMinScore(''); setStatus(null); setLockedOnly(false); setPage(1); setTimeout(loadLeads, 0); }}>{t.reset}</Button>
-              </Group>
+            <Box px="xs">
+              <Paper withBorder p="md" radius="md">
+                <Group wrap="wrap" align="end">
+                  <TextInput leftSection={<IconFilter size={14} />} w={320} placeholder={t.search} value={q} onChange={(e) => setQ(e.currentTarget.value)} />
+                  <NumberInput w={140} placeholder={t.minScore} value={minScore} onChange={(v: any) => setMinScore(v ?? '')} min={0} max={100} allowNegative={false} />
+                  <Select w={170} placeholder={t.status} data={statusOptions} value={status} onChange={setStatus} clearable />
+                  <Select w={160} data={[{ value: '0', label: 'All' }, { value: '1', label: t.lockOnly }]} value={lockedOnly ? '1' : '0'} onChange={(v) => setLockedOnly(v === '1')} />
+                  <Button loading={loading} onClick={() => { setPage(1); loadLeads(); }}>{t.filter}</Button>
+                  <Button variant="default" onClick={() => { setQ(''); setMinScore(''); setStatus(null); setLockedOnly(false); setPage(1); setTimeout(loadLeads, 0); }}>{t.reset}</Button>
+                </Group>
 
-              <Group mt="xs" mb="sm" c="dimmed" justify="space-between">
-                <Text size="sm">{t.total}: {totalRows} · {t.page}: {page}/{totalPages}</Text>
-              </Group>
+                <Group mt="sm" justify="space-between" wrap="wrap">
+                  <Text size="sm" c="dimmed">{t.total}: {totalRows} · {t.page}: {page}/{totalPages}</Text>
+                  <Group>
+                    <Badge variant="light">{t.selected}: {selectedIds.size}</Badge>
+                    <Select w={190} placeholder={t.bulkAction} data={bulkOptions} value={bulkAction} onChange={setBulkAction} clearable />
+                    <Button size="xs" disabled={!bulkAction || selectedIds.size === 0} onClick={applyBulk}>{t.apply}</Button>
+                  </Group>
+                </Group>
 
-              <Divider mb="sm" />
+                <Divider my="sm" />
 
-              <ScrollArea>
-                <Table striped highlightOnHover withTableBorder withColumnBorders miw={1500} verticalSpacing="sm">
-                  <Table.Thead>
-                    <Table.Tr>
-                      <Table.Th w={64}>ID</Table.Th><Table.Th>Name</Table.Th><Table.Th w={88}>Score</Table.Th><Table.Th>Status</Table.Th><Table.Th>Owner</Table.Th>
-                      <Table.Th>Locked</Table.Th><Table.Th>Vertical</Table.Th><Table.Th w={122}>CreatedAt</Table.Th><Table.Th w={122}>UpdatedAt</Table.Th><Table.Th w={84}>Action</Table.Th><Table.Th style={{ width: 420, minWidth: 420, maxWidth: 420 }}>Reason</Table.Th>
-                    </Table.Tr>
-                  </Table.Thead>
-                  <Table.Tbody>
-                    {rows.length === 0 ? (
-                      <Table.Tr><Table.Td colSpan={11}><Text c="dimmed" ta="center" py="md">{t.noData}</Text></Table.Td></Table.Tr>
-                    ) : rows.map((r) => (
-                      <Table.Tr key={r.id}>
-                        <Table.Td>{r.id}</Table.Td>
-                        <Table.Td><Text fw={600}>{r.name}</Text><Text size="xs" c="dimmed">{r.source}</Text></Table.Td>
-                        <Table.Td><Badge color={scoreColor(r.tidb_potential_score ?? 0)} style={{ minWidth: 36, justifyContent: 'center' }}>{r.tidb_potential_score ?? '-'}</Badge></Table.Td>
-                        <Table.Td>{r.lead_status}</Table.Td>
-                        <Table.Td>{r.owner || '-'}</Table.Td>
-                        <Table.Td>{r.manual_locked ? 'LOCKED' : '-'}</Table.Td>
-                        <Table.Td>{r.vertical}</Table.Td>
-                        <Table.Td style={{ whiteSpace: 'nowrap' }}>{(r.created_at || '').slice(0, 10)}</Table.Td>
-                        <Table.Td style={{ whiteSpace: 'nowrap' }}>{(r.updated_at || '').slice(0, 10)}</Table.Td>
-                        <Table.Td><Button size="xs" onClick={() => setSelected({ ...r })}>{t.edit}</Button></Table.Td>
-                        <Table.Td style={{ width: 420, minWidth: 420, maxWidth: 420 }}>
-                          <Tooltip multiline w={560} withArrow label={r.tidb_potential_reason || '-'}>
-                            <Text size="sm" lineClamp={1}>{r.tidb_potential_reason || ''}</Text>
-                          </Tooltip>
-                        </Table.Td>
+                <ScrollArea>
+                  <Table striped highlightOnHover withTableBorder withColumnBorders miw={1560} verticalSpacing="sm">
+                    <Table.Thead>
+                      <Table.Tr>
+                        <Table.Th w={46}><Checkbox checked={allChecked} onChange={(e) => {
+                          const v = e.currentTarget.checked;
+                          setSelectedIds(v ? new Set(rows.map(r => r.id)) : new Set());
+                        }} /></Table.Th>
+                        <Table.Th w={64}>ID</Table.Th><Table.Th>Name</Table.Th><Table.Th w={88}>Score</Table.Th><Table.Th>Status</Table.Th><Table.Th>Owner</Table.Th>
+                        <Table.Th>Locked</Table.Th><Table.Th>Vertical</Table.Th><Table.Th w={122}>CreatedAt</Table.Th><Table.Th w={122}>UpdatedAt</Table.Th><Table.Th w={84}>Action</Table.Th><Table.Th style={{ width: 420, minWidth: 420, maxWidth: 420 }}>Reason</Table.Th>
                       </Table.Tr>
-                    ))}
-                  </Table.Tbody>
-                </Table>
-              </ScrollArea>
+                    </Table.Thead>
+                    <Table.Tbody>
+                      {rows.length === 0 ? (
+                        <Table.Tr><Table.Td colSpan={12}><Text c="dimmed" ta="center" py="md">{t.noData}</Text></Table.Td></Table.Tr>
+                      ) : rows.map((r) => (
+                        <Table.Tr key={r.id}>
+                          <Table.Td>
+                            <Checkbox checked={selectedIds.has(r.id)} onChange={(e) => {
+                              const next = new Set(selectedIds);
+                              if (e.currentTarget.checked) next.add(r.id); else next.delete(r.id);
+                              setSelectedIds(next);
+                            }} />
+                          </Table.Td>
+                          <Table.Td>{r.id}</Table.Td>
+                          <Table.Td><Text fw={600}>{r.name}</Text><Text size="xs" c="dimmed">{r.source}</Text></Table.Td>
+                          <Table.Td><Badge color={scoreColor(r.tidb_potential_score ?? 0)} style={{ minWidth: 36, justifyContent: 'center' }}>{r.tidb_potential_score ?? '-'}</Badge></Table.Td>
+                          <Table.Td>{r.lead_status}</Table.Td>
+                          <Table.Td>{r.owner || '-'}</Table.Td>
+                          <Table.Td>{r.manual_locked ? 'LOCKED' : '-'}</Table.Td>
+                          <Table.Td>{r.vertical}</Table.Td>
+                          <Table.Td style={{ whiteSpace: 'nowrap' }}>{(r.created_at || '').slice(0, 10)}</Table.Td>
+                          <Table.Td style={{ whiteSpace: 'nowrap' }}>{(r.updated_at || '').slice(0, 10)}</Table.Td>
+                          <Table.Td><Button size="xs" onClick={() => setSelected({ ...r })}>{t.edit}</Button></Table.Td>
+                          <Table.Td style={{ width: 420, minWidth: 420, maxWidth: 420 }}>
+                            <Tooltip multiline w={560} withArrow label={r.tidb_potential_reason || '-'}>
+                              <Text size="sm" lineClamp={1}>{r.tidb_potential_reason || ''}</Text>
+                            </Tooltip>
+                          </Table.Td>
+                        </Table.Tr>
+                      ))}
+                    </Table.Tbody>
+                  </Table>
+                </ScrollArea>
 
-              <Group mt="sm" justify="space-between">
-                <Button variant="default" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>{t.prev}</Button>
-                <Button variant="default" disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)}>{t.next}</Button>
-              </Group>
-            </Paper>
+                <Group mt="sm" justify="space-between">
+                  <Button variant="default" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>{t.prev}</Button>
+                  <Button variant="default" disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)}>{t.next}</Button>
+                </Group>
+              </Paper>
+            </Box>
           </Tabs.Panel>
 
           <Tabs.Panel value="enrich" pt="md">
-            <SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }} spacing="md">
-              <Card withBorder radius="md"><Text size="sm" c="dimmed">Pending</Text><Title order={3}>{enrich?.stats?.pending ?? 0}</Title></Card>
-              <Card withBorder radius="md"><Text size="sm" c="dimmed">Running</Text><Title order={3}>{enrich?.stats?.running ?? 0}</Title></Card>
-              <Card withBorder radius="md"><Text size="sm" c="dimmed">Done</Text><Title order={3}>{enrich?.stats?.done_count ?? 0}</Title></Card>
-              <Card withBorder radius="md"><Text size="sm" c="dimmed">Failed</Text><Title order={3}>{enrich?.stats?.failed ?? 0}</Title></Card>
-            </SimpleGrid>
+            <Box px="xs">
+              <SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }} spacing="md">
+                <Card withBorder radius="md"><Text size="sm" c="dimmed">Pending</Text><Title order={3}>{enrich?.stats?.pending ?? 0}</Title></Card>
+                <Card withBorder radius="md"><Text size="sm" c="dimmed">Running</Text><Title order={3}>{enrich?.stats?.running ?? 0}</Title></Card>
+                <Card withBorder radius="md"><Text size="sm" c="dimmed">Done</Text><Title order={3}>{enrich?.stats?.done_count ?? 0}</Title></Card>
+                <Card withBorder radius="md"><Text size="sm" c="dimmed">Failed</Text><Title order={3}>{enrich?.stats?.failed ?? 0}</Title></Card>
+              </SimpleGrid>
 
-            <Paper withBorder p="md" radius="md" mt="md">
-              <Group>
-                <TextInput style={{ flex: 1 }} placeholder="IDs, e.g. 12,25,39" value={enqueueIds} onChange={(e) => setEnqueueIds(e.currentTarget.value)} />
-                <Button onClick={enqueue}>{t.enqueue}</Button>
-                <Button variant="light" leftSection={<IconActivity size={14} />} onClick={runEnrichBatch}>{t.runBatch}</Button>
-              </Group>
-            </Paper>
+              <Paper withBorder p="md" radius="md" mt="md">
+                <Group>
+                  <TextInput style={{ flex: 1 }} placeholder="IDs, e.g. 12,25,39" value={enqueueIds} onChange={(e) => setEnqueueIds(e.currentTarget.value)} />
+                  <Button onClick={enqueue}>{t.enqueue}</Button>
+                  <Button variant="light" leftSection={<IconActivity size={14} />} onClick={runEnrichBatch}>{t.runBatch}</Button>
+                </Group>
+              </Paper>
 
-            <Paper withBorder p="md" radius="md" mt="md">
-              <ScrollArea>
-                <Table striped highlightOnHover withTableBorder withColumnBorders miw={960}>
-                  <Table.Thead>
-                    <Table.Tr><Table.Th>QueueID</Table.Th><Table.Th>LeadID</Table.Th><Table.Th>Name</Table.Th><Table.Th>Status</Table.Th><Table.Th>Attempts</Table.Th><Table.Th>Updated</Table.Th></Table.Tr>
-                  </Table.Thead>
-                  <Table.Tbody>
-                    {(enrich?.rows || []).map((r) => (
-                      <Table.Tr key={r.id}><Table.Td>{r.id}</Table.Td><Table.Td>{r.lead_id}</Table.Td><Table.Td>{r.name || ''}</Table.Td><Table.Td>{r.status}</Table.Td><Table.Td>{r.attempts}</Table.Td><Table.Td>{r.updated_at || ''}</Table.Td></Table.Tr>
-                    ))}
-                  </Table.Tbody>
-                </Table>
-              </ScrollArea>
-            </Paper>
+              <Paper withBorder p="md" radius="md" mt="md">
+                <ScrollArea>
+                  <Table striped highlightOnHover withTableBorder withColumnBorders miw={960}>
+                    <Table.Thead>
+                      <Table.Tr><Table.Th>QueueID</Table.Th><Table.Th>LeadID</Table.Th><Table.Th>Name</Table.Th><Table.Th>Status</Table.Th><Table.Th>Attempts</Table.Th><Table.Th>Updated</Table.Th></Table.Tr>
+                    </Table.Thead>
+                    <Table.Tbody>
+                      {(enrich?.rows || []).map((r) => (
+                        <Table.Tr key={r.id}><Table.Td>{r.id}</Table.Td><Table.Td>{r.lead_id}</Table.Td><Table.Td>{r.name || ''}</Table.Td><Table.Td>{r.status}</Table.Td><Table.Td>{r.attempts}</Table.Td><Table.Td>{r.updated_at || ''}</Table.Td></Table.Tr>
+                      ))}
+                    </Table.Tbody>
+                  </Table>
+                </ScrollArea>
+              </Paper>
+            </Box>
           </Tabs.Panel>
         </Tabs>
       </Stack>

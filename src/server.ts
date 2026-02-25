@@ -173,9 +173,28 @@ app.get('/api/dashboard', async (_req: Request, res: Response) => {
     GROUP BY DATE(updated_at)
     ORDER BY d ASC
   `);
+  const [scoreBuckets] = await conn.query(`
+    SELECT
+      CASE
+        WHEN IFNULL(tidb_potential_score,0) >= 80 THEN '80-100'
+        WHEN IFNULL(tidb_potential_score,0) >= 60 THEN '60-79'
+        WHEN IFNULL(tidb_potential_score,0) >= 40 THEN '40-59'
+        ELSE '0-39'
+      END bucket,
+      COUNT(*) c
+    FROM \`${TABLE}\`
+    GROUP BY bucket
+    ORDER BY FIELD(bucket, '80-100', '60-79', '40-59', '0-39')
+  `);
+  const [enrichRows] = await conn.query(`
+    SELECT IFNULL(enrich_status, 'unknown') enrich_status, COUNT(*) c
+    FROM \`${TABLE}\`
+    GROUP BY IFNULL(enrich_status, 'unknown')
+    ORDER BY c DESC
+  `);
   const dailyTrend = Array.isArray(trendRows) ? trendRows.map((r:any)=>({ d: String(r.d), c: Number(r.c||0) })) : [];
   await conn.end();
-  res.json({ total: tot?.c || 0, locked: locked?.c || 0, avgScore: avgScore?.score || 0, statusRows, topRows, dailyTrend });
+  res.json({ total: tot?.c || 0, locked: locked?.c || 0, avgScore: avgScore?.score || 0, statusRows, topRows, dailyTrend, scoreBuckets, enrichRows });
 });
 
 app.get('/api/enrich/queue', async (_req: Request, res: Response) => {
