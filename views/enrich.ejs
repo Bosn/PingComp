@@ -5,13 +5,14 @@
   <title>PingComp · Enrich</title>
   <link rel="stylesheet" href="/styles.css">
   <script src="/theme.js"></script>
+  <script src="/lang.js"></script>
 </head>
 <body>
 <div class="container">
   <div class="header">
     <div class="brand"><img src="/logo.svg" class="logo" alt="logo"><div><h1>Enrichment Queue</h1><p>队列、重试与状态管理</p></div></div>
     <div style="display:flex;gap:8px;align-items:center;">
-      <select class="input" style="width:110px" onchange="location.href='/enrich?lang='+this.value">
+      <select class="input" style="width:110px" onchange="setLang(this.value)">
         <option value="zh" <%= lang==='zh' ? 'selected' : '' %>>中文</option>
         <option value="en" <%= lang==='en' ? 'selected' : '' %>>EN</option>
       </select>

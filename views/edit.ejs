@@ -6,6 +6,7 @@
   <title>PingComp · 编辑</title>
   <link rel="stylesheet" href="/styles.css">
   <script src="/theme.js"></script>
+  <script src="/lang.js"></script>
 </head>
 <body>
   <div class="container">
@@ -18,7 +19,7 @@
         </div>
       </div>
       <div style="display:flex;gap:8px;align-items:center;">
-        <select class="input" style="width:110px" onchange="location.href='/edit/<%= row.id %>?lang='+this.value">
+        <select class="input" style="width:110px" onchange="setLang(this.value)">
           <option value="zh" <%= lang==='zh' ? 'selected' : '' %>>中文</option>
           <option value="en" <%= lang==='en' ? 'selected' : '' %>>EN</option>
         </select>
