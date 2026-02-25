@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   AppShell, Badge, Button, Card, Divider, Group, Modal, NumberInput, Paper, ScrollArea, Select,
-  SimpleGrid, Stack, Table, Tabs, Text, TextInput, Textarea, Title, useMantineColorScheme,
+  SimpleGrid, Stack, Table, Tabs, Text, TextInput, Textarea, Title, Tooltip, useMantineColorScheme,
 } from '@mantine/core';
 import { IconActivity, IconBolt, IconBrain, IconFilter, IconGauge, IconMoonStars, IconSun, IconWorld } from '@tabler/icons-react';
 
@@ -182,8 +182,8 @@ export function App() {
                 <Table striped highlightOnHover withTableBorder withColumnBorders miw={1500} verticalSpacing="sm">
                   <Table.Thead>
                     <Table.Tr>
-                      <Table.Th>ID</Table.Th><Table.Th>Name</Table.Th><Table.Th>Score</Table.Th><Table.Th>Status</Table.Th><Table.Th>Owner</Table.Th>
-                      <Table.Th>Locked</Table.Th><Table.Th>Vertical</Table.Th><Table.Th>CreatedAt</Table.Th><Table.Th>UpdatedAt</Table.Th><Table.Th>Action</Table.Th><Table.Th style={{ minWidth: 360 }}>Reason</Table.Th>
+                      <Table.Th w={64}>ID</Table.Th><Table.Th>Name</Table.Th><Table.Th w={88}>Score</Table.Th><Table.Th>Status</Table.Th><Table.Th>Owner</Table.Th>
+                      <Table.Th>Locked</Table.Th><Table.Th>Vertical</Table.Th><Table.Th w={122}>CreatedAt</Table.Th><Table.Th w={122}>UpdatedAt</Table.Th><Table.Th w={84}>Action</Table.Th><Table.Th style={{ width: 420, minWidth: 420, maxWidth: 420 }}>Reason</Table.Th>
                     </Table.Tr>
                   </Table.Thead>
                   <Table.Tbody>
@@ -193,15 +193,19 @@ export function App() {
                       <Table.Tr key={r.id}>
                         <Table.Td>{r.id}</Table.Td>
                         <Table.Td><Text fw={600}>{r.name}</Text><Text size="xs" c="dimmed">{r.source}</Text></Table.Td>
-                        <Table.Td><Badge color={scoreColor(r.tidb_potential_score ?? 0)}>{r.tidb_potential_score ?? '-'}</Badge></Table.Td>
+                        <Table.Td><Badge color={scoreColor(r.tidb_potential_score ?? 0)} style={{ minWidth: 36, justifyContent: 'center' }}>{r.tidb_potential_score ?? '-'}</Badge></Table.Td>
                         <Table.Td>{r.lead_status}</Table.Td>
                         <Table.Td>{r.owner || '-'}</Table.Td>
                         <Table.Td>{r.manual_locked ? 'LOCKED' : '-'}</Table.Td>
                         <Table.Td>{r.vertical}</Table.Td>
-                        <Table.Td>{(r.created_at || '').slice(0, 10)}</Table.Td>
-                        <Table.Td>{(r.updated_at || '').slice(0, 10)}</Table.Td>
+                        <Table.Td style={{ whiteSpace: 'nowrap' }}>{(r.created_at || '').slice(0, 10)}</Table.Td>
+                        <Table.Td style={{ whiteSpace: 'nowrap' }}>{(r.updated_at || '').slice(0, 10)}</Table.Td>
                         <Table.Td><Button size="xs" onClick={() => setSelected({ ...r })}>{t.edit}</Button></Table.Td>
-                        <Table.Td><Text size="sm" lineClamp={2}>{r.tidb_potential_reason || ''}</Text></Table.Td>
+                        <Table.Td style={{ width: 420, minWidth: 420, maxWidth: 420 }}>
+                          <Tooltip multiline w={560} withArrow label={r.tidb_potential_reason || '-'}>
+                            <Text size="sm" lineClamp={1}>{r.tidb_potential_reason || ''}</Text>
+                          </Tooltip>
+                        </Table.Td>
                       </Table.Tr>
                     ))}
                   </Table.Tbody>
