@@ -166,8 +166,16 @@ app.get('/api/dashboard', async (_req: Request, res: Response) => {
   const [[avgScore]]: any = await conn.query(`SELECT ROUND(AVG(IFNULL(tidb_potential_score,0)),1) score FROM \`${TABLE}\``);
   const [statusRows] = await conn.query(`SELECT lead_status, COUNT(*) c FROM \`${TABLE}\` GROUP BY lead_status ORDER BY c DESC`);
   const [topRows] = await conn.query(`SELECT id,name,tidb_potential_score,lead_status,manual_locked FROM \`${TABLE}\` ORDER BY IFNULL(tidb_potential_score,0) DESC LIMIT 12`);
+  const [trendRows]: any = await conn.query(`
+    SELECT DATE(updated_at) d, COUNT(*) c
+    FROM \`${TABLE}\`
+    WHERE updated_at >= DATE_SUB(CURDATE(), INTERVAL 6 DAY)
+    GROUP BY DATE(updated_at)
+    ORDER BY d ASC
+  `);
+  const dailyTrend = Array.isArray(trendRows) ? trendRows.map((r:any)=>({ d: String(r.d), c: Number(r.c||0) })) : [];
   await conn.end();
-  res.json({ total: tot?.c || 0, locked: locked?.c || 0, avgScore: avgScore?.score || 0, statusRows, topRows });
+  res.json({ total: tot?.c || 0, locked: locked?.c || 0, avgScore: avgScore?.score || 0, statusRows, topRows, dailyTrend });
 });
 
 app.get('/api/enrich/queue', async (_req: Request, res: Response) => {
