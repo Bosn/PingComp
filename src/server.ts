@@ -188,7 +188,15 @@ app.get('/api/leads', async (req: Request, res: Response) => {
     created_desc: 'created_at DESC',
     created_asc: 'created_at ASC',
     name_asc: 'name ASC',
-    name_desc: 'name DESC'
+    name_desc: 'name DESC',
+    id_desc: 'id DESC',
+    id_asc: 'id ASC',
+    owner_desc: 'owner DESC, updated_at DESC',
+    owner_asc: 'owner ASC, updated_at DESC',
+    vertical_desc: 'vertical DESC, updated_at DESC',
+    vertical_asc: 'vertical ASC, updated_at DESC',
+    status_desc: 'lead_status DESC, updated_at DESC',
+    status_asc: 'lead_status ASC, updated_at DESC'
   };
   const orderBy = sortMap[sort] || sortMap.score_desc;
 

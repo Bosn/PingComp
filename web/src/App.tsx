@@ -289,30 +289,20 @@ export function App() {
   async function runEnrichBatch() { await fetch('/api/enrich/run', { method: 'POST' }); await loadEnrich(); }
   async function enqueue() { await fetch('/api/enrich/enqueue', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids: enqueueIds }) }); setEnqueueIds(''); await loadEnrich(); }
 
-  const sortedRows = useMemo(() => {
-    const arr = [...rows];
-    const val = (r: Lead) => {
-      if (sortKey === 'score') return Number(r.tidb_potential_score ?? -1);
-      if (sortKey === 'id') return Number(r.id);
-      if (sortKey === 'created_at' || sortKey === 'updated_at') return String((r as any)[sortKey] || '');
-      return String((r as any)[sortKey] || '').toLowerCase();
-    };
-    arr.sort((a, b) => {
-      const av: any = val(a), bv: any = val(b);
-      if (av < bv) return sortDir === 'asc' ? -1 : 1;
-      if (av > bv) return sortDir === 'asc' ? 1 : -1;
-      return 0;
-    });
-    return arr;
-  }, [rows, sortKey, sortDir]);
+  const sortedRows = rows;
 
   const setSort = (k: typeof sortKey) => {
     if (sortKey === k) setSortDir(sortDir === 'asc' ? 'desc' : 'asc');
     else { setSortKey(k); setSortDir('desc'); }
   };
 
+  const thStyle: any = {
+    background: colorScheme === 'dark' ? 'rgba(18,24,39,0.95)' : 'rgba(246,248,252,0.98)',
+    borderBottom: colorScheme === 'dark' ? '1px solid rgba(120,140,180,0.45)' : '1px solid #d7deea',
+  };
+
   const SortHead = ({ label, k, w }: { label: string; k: typeof sortKey; w?: number }) => (
-    <Table.Th w={w}>
+    <Table.Th w={w} style={thStyle}>
       <Group gap={4} wrap="nowrap" style={{ cursor: 'pointer' }} onClick={() => setSort(k)}>
         <Text size="sm" fw={600}>{label}</Text>
         {sortKey === k ? (sortDir === 'asc' ? <IconArrowUp size={14} /> : <IconArrowDown size={14} />) : null}
