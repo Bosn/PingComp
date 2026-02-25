@@ -1,9 +1,30 @@
-import { useEffect, useState } from 'react';
-import { AppShell, Badge, Button, Group, NumberInput, Select, Stack, Table, Text, TextInput, Title, Modal, Textarea } from '@mantine/core';
+import { useEffect, useMemo, useState } from 'react';
+import {
+  AppShell,
+  Badge,
+  Button,
+  Card,
+  Divider,
+  Group,
+  Modal,
+  NumberInput,
+  Paper,
+  Select,
+  SimpleGrid,
+  Stack,
+  Table,
+  Tabs,
+  Text,
+  TextInput,
+  Textarea,
+  Title,
+  useMantineColorScheme,
+} from '@mantine/core';
 
 type Lead = {
   id: number;
   name: string;
+  region?: string;
   vertical: string;
   source: string;
   tidb_potential_score: number | null;
@@ -13,114 +34,366 @@ type Lead = {
   manual_locked: number;
   created_at?: string;
   updated_at?: string;
+  funding?: string;
+  linkedin?: string;
+  latest_news?: string;
+  manual_note?: string;
+  tags?: string;
+  source_confidence?: number | null;
+  enrich_status?: string;
 };
 
+type DashboardPayload = {
+  total: number;
+  locked: number;
+  avgScore: number;
+  statusRows: Array<{ lead_status: string; c: number }>;
+  topRows: Array<Pick<Lead, 'id' | 'name' | 'tidb_potential_score' | 'lead_status' | 'manual_locked'>>;
+};
+
+type EnrichJob = {
+  id: number;
+  lead_id: number;
+  status: string;
+  attempts: number;
+  last_error?: string;
+  updated_at?: string;
+  name?: string;
+  enrich_status?: string;
+};
+
+type EnrichPayload = {
+  rows: EnrichJob[];
+  stats: { pending: number; running: number; done_count: number; failed: number };
+};
+
+const I18N = {
+  zh: {
+    title: 'PingComp',
+    subtitle: '潜在客户人工清洗与标注 · React + Mantine',
+    dashboard: '仪表盘',
+    leads: '线索管理',
+    enrich: 'Enrich 队列',
+    filter: '筛选',
+    reset: '重置',
+    search: '搜索 name/vertical/source/tags',
+    minScore: '最低分',
+    status: '状态',
+    page: '页码',
+    lockOnly: '仅锁定',
+    prev: '上一页',
+    next: '下一页',
+    edit: '编辑',
+    saveLock: '保存并锁定',
+    total: '总线索',
+    locked: '人工锁定',
+    avg: '平均分',
+    lockRate: '锁定占比',
+    exportCsv: '导出CSV',
+    runBatch: '执行一轮(20条)',
+    enqueue: '入队',
+  },
+  en: {
+    title: 'PingComp',
+    subtitle: 'Lead ops workspace · React + Mantine',
+    dashboard: 'Dashboard',
+    leads: 'Leads',
+    enrich: 'Enrich Queue',
+    filter: 'Filter',
+    reset: 'Reset',
+    search: 'Search name/vertical/source/tags',
+    minScore: 'Min score',
+    status: 'Status',
+    page: 'Page',
+    lockOnly: 'Locked only',
+    prev: 'Prev',
+    next: 'Next',
+    edit: 'Edit',
+    saveLock: 'Save & lock',
+    total: 'Total leads',
+    locked: 'Manual locked',
+    avg: 'Avg score',
+    lockRate: 'Lock ratio',
+    exportCsv: 'Export CSV',
+    runBatch: 'Run batch (20)',
+    enqueue: 'Enqueue',
+  },
+} as const;
+
+function useLocalLang() {
+  const [lang, setLangState] = useState<'zh' | 'en'>(() => (localStorage.getItem('pingcomp_lang') === 'en' ? 'en' : 'zh'));
+  const setLang = (v: 'zh' | 'en') => {
+    localStorage.setItem('pingcomp_lang', v);
+    setLangState(v);
+  };
+  return { lang, setLang };
+}
+
 export function App() {
+  const { colorScheme, setColorScheme } = useMantineColorScheme();
+  const { lang, setLang } = useLocalLang();
+  const t = I18N[lang];
+
+  const [tab, setTab] = useState<string | null>('dashboard');
+
   const [rows, setRows] = useState<Lead[]>([]);
   const [q, setQ] = useState('');
   const [minScore, setMinScore] = useState<number | ''>('');
   const [status, setStatus] = useState<string | null>(null);
+  const [lockedOnly, setLockedOnly] = useState<boolean>(false);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
+  const [totalRows, setTotalRows] = useState(0);
   const [selected, setSelected] = useState<Lead | null>(null);
   const [loading, setLoading] = useState(false);
 
-  async function load() {
+  const [dash, setDash] = useState<DashboardPayload | null>(null);
+  const [enrich, setEnrich] = useState<EnrichPayload | null>(null);
+  const [enqueueIds, setEnqueueIds] = useState('');
+
+  const statusOptions = useMemo(() => [
+    { value: 'new', label: 'new' },
+    { value: 'contacted', label: 'contacted' },
+    { value: 'qualified', label: 'qualified' },
+    { value: 'disqualified', label: 'disqualified' },
+  ], []);
+
+  async function loadLeads() {
     setLoading(true);
     const params = new URLSearchParams();
     if (q) params.set('q', q);
     if (minScore !== '') params.set('minScore', String(minScore));
     if (status) params.set('status', status);
+    if (lockedOnly) params.set('locked', '1');
     params.set('page', String(page));
     params.set('pageSize', '50');
     const r = await fetch(`/api/leads?${params.toString()}`);
     const j = await r.json();
     setRows(j.rows || []);
     setTotalPages(j.totalPages || 1);
+    setTotalRows(j.total || 0);
     setLoading(false);
   }
 
-  useEffect(() => { load(); }, [page]);
+  async function loadDashboard() {
+    const r = await fetch('/api/dashboard');
+    const j = await r.json();
+    setDash(j);
+  }
+
+  async function loadEnrich() {
+    const r = await fetch('/api/enrich/queue');
+    const j = await r.json();
+    setEnrich(j);
+  }
+
+  useEffect(() => {
+    loadLeads();
+  }, [page]);
+
+  useEffect(() => {
+    if (tab === 'dashboard') loadDashboard();
+    if (tab === 'enrich') loadEnrich();
+  }, [tab]);
 
   async function saveLead() {
     if (!selected) return;
     await fetch(`/api/leads/${selected.id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(selected)
+      body: JSON.stringify(selected),
     });
     setSelected(null);
-    await load();
+    await Promise.all([loadLeads(), loadDashboard()]);
+  }
+
+  async function runEnrichBatch() {
+    await fetch('/api/enrich/run', { method: 'POST' });
+    await loadEnrich();
+  }
+
+  async function enqueue() {
+    await fetch('/api/enrich/enqueue', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids: enqueueIds }),
+    });
+    setEnqueueIds('');
+    await loadEnrich();
   }
 
   return (
     <AppShell padding="md">
-      <Stack>
-        <Group justify="space-between">
-          <Title order={2}>PingComp React</Title>
-          <Group>
-            <Button variant="light" component="a" href="/dashboard">Old Dashboard</Button>
-            <Button variant="light" component="a" href="/enrich">Enrich Queue</Button>
+      <Stack gap="md">
+        <Paper withBorder p="md" radius="md">
+          <Group justify="space-between" align="center">
+            <Group>
+              <img src="/logo.svg" alt="PingComp" width={32} height={32} />
+              <Stack gap={0}>
+                <Title order={2}>{t.title}</Title>
+                <Text size="sm" c="dimmed">{t.subtitle}</Text>
+              </Stack>
+            </Group>
+
+            <Group>
+              <Select
+                w={110}
+                data={[{ value: 'zh', label: '中文' }, { value: 'en', label: 'EN' }]}
+                value={lang}
+                onChange={(v) => setLang((v as 'zh' | 'en') || 'zh')}
+              />
+              <Select
+                w={130}
+                data={[
+                  { value: 'auto', label: 'system' },
+                  { value: 'dark', label: 'dark' },
+                  { value: 'light', label: 'light' },
+                ]}
+                value={colorScheme === 'auto' ? 'auto' : colorScheme}
+                onChange={(v) => setColorScheme((v as any) || 'auto')}
+              />
+              <Button component="a" href="/api/export.csv">{t.exportCsv}</Button>
+            </Group>
           </Group>
-        </Group>
+        </Paper>
 
-        <Group>
-          <TextInput placeholder="Search name/vertical/source" value={q} onChange={(e) => setQ(e.currentTarget.value)} />
-          <NumberInput placeholder="Min score" value={minScore} onChange={(v:any)=>setMinScore(v ?? '')} allowNegative={false} min={0} max={100} />
-          <Select placeholder="Status" data={["new","contacted","qualified","disqualified"]} value={status} onChange={setStatus} clearable />
-          <Button onClick={() => { setPage(1); load(); }} loading={loading}>Filter</Button>
-        </Group>
+        <Tabs value={tab} onChange={setTab}>
+          <Tabs.List>
+            <Tabs.Tab value="dashboard">{t.dashboard}</Tabs.Tab>
+            <Tabs.Tab value="leads">{t.leads}</Tabs.Tab>
+            <Tabs.Tab value="enrich">{t.enrich}</Tabs.Tab>
+          </Tabs.List>
 
-        <Table striped highlightOnHover withTableBorder withColumnBorders>
-          <Table.Thead>
-            <Table.Tr>
-              <Table.Th>ID</Table.Th>
-              <Table.Th>Name</Table.Th>
-              <Table.Th>Score</Table.Th>
-              <Table.Th>Status</Table.Th>
-              <Table.Th>Locked</Table.Th>
-              <Table.Th>Vertical</Table.Th>
-              <Table.Th>CreatedAt</Table.Th>
-              <Table.Th>UpdatedAt</Table.Th>
-              <Table.Th>Action</Table.Th>
-            </Table.Tr>
-          </Table.Thead>
-          <Table.Tbody>
-            {rows.map((r) => (
-              <Table.Tr key={r.id}>
-                <Table.Td>{r.id}</Table.Td>
-                <Table.Td>
-                  <Text fw={600}>{r.name}</Text>
-                  <Text size="xs" c="dimmed">{r.source}</Text>
-                </Table.Td>
-                <Table.Td><Badge color={(r.tidb_potential_score ?? 0) >= 75 ? 'green' : (r.tidb_potential_score ?? 0) >= 50 ? 'yellow' : 'red'}>{r.tidb_potential_score ?? '-'}</Badge></Table.Td>
-                <Table.Td>{r.lead_status}</Table.Td>
-                <Table.Td>{r.manual_locked ? 'LOCKED' : '-'}</Table.Td>
-                <Table.Td>{r.vertical}</Table.Td>
-                <Table.Td>{r.created_at || ''}</Table.Td>
-                <Table.Td>{r.updated_at || ''}</Table.Td>
-                <Table.Td><Button size="xs" onClick={() => setSelected({ ...r })}>Edit</Button></Table.Td>
-              </Table.Tr>
-            ))}
-          </Table.Tbody>
-        </Table>
+          <Tabs.Panel value="dashboard" pt="md">
+            <SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }} spacing="md">
+              <Card withBorder><Text size="sm" c="dimmed">{t.total}</Text><Title order={3}>{dash?.total ?? '-'}</Title></Card>
+              <Card withBorder><Text size="sm" c="dimmed">{t.locked}</Text><Title order={3}>{dash?.locked ?? '-'}</Title></Card>
+              <Card withBorder><Text size="sm" c="dimmed">{t.avg}</Text><Title order={3}>{dash?.avgScore ?? '-'}</Title></Card>
+              <Card withBorder><Text size="sm" c="dimmed">{t.lockRate}</Text><Title order={3}>{dash?.total ? Math.round((dash.locked / dash.total) * 100) : 0}%</Title></Card>
+            </SimpleGrid>
 
-        <Group>
-          <Button variant="default" disabled={page <= 1} onClick={() => setPage(p => p - 1)}>Prev</Button>
-          <Text>Page {page}/{totalPages}</Text>
-          <Button variant="default" disabled={page >= totalPages} onClick={() => setPage(p => p + 1)}>Next</Button>
-        </Group>
+            <SimpleGrid cols={{ base: 1, lg: 2 }} spacing="md" mt="md">
+              <Card withBorder>
+                <Title order={4} mb="sm">Status distribution</Title>
+                {(dash?.statusRows || []).map((s) => (
+                  <Group key={s.lead_status} justify="space-between" py={6}>
+                    <Text>{s.lead_status}</Text><Badge>{s.c}</Badge>
+                  </Group>
+                ))}
+              </Card>
+
+              <Card withBorder>
+                <Title order={4} mb="sm">Top leads</Title>
+                <Table striped>
+                  <Table.Thead><Table.Tr><Table.Th>ID</Table.Th><Table.Th>Name</Table.Th><Table.Th>Score</Table.Th></Table.Tr></Table.Thead>
+                  <Table.Tbody>
+                    {(dash?.topRows || []).map((r) => (
+                      <Table.Tr key={r.id}><Table.Td>{r.id}</Table.Td><Table.Td>{r.name}</Table.Td><Table.Td>{r.tidb_potential_score ?? '-'}</Table.Td></Table.Tr>
+                    ))}
+                  </Table.Tbody>
+                </Table>
+              </Card>
+            </SimpleGrid>
+          </Tabs.Panel>
+
+          <Tabs.Panel value="leads" pt="md">
+            <Paper withBorder p="md" radius="md">
+              <Group wrap="wrap" align="end">
+                <TextInput w={280} placeholder={t.search} value={q} onChange={(e) => setQ(e.currentTarget.value)} />
+                <NumberInput w={120} placeholder={t.minScore} value={minScore} onChange={(v: any) => setMinScore(v ?? '')} min={0} max={100} allowNegative={false} />
+                <Select w={170} placeholder={t.status} data={statusOptions} value={status} onChange={setStatus} clearable />
+                <Select
+                  w={150}
+                  data={[{ value: '0', label: 'All' }, { value: '1', label: t.lockOnly }]}
+                  value={lockedOnly ? '1' : '0'}
+                  onChange={(v) => setLockedOnly(v === '1')}
+                />
+                <Button loading={loading} onClick={() => { setPage(1); loadLeads(); }}>{t.filter}</Button>
+                <Button variant="default" onClick={() => { setQ(''); setMinScore(''); setStatus(null); setLockedOnly(false); setPage(1); setTimeout(loadLeads, 0); }}>{t.reset}</Button>
+              </Group>
+
+              <Group mt="xs" mb="sm" c="dimmed" justify="space-between">
+                <Text size="sm">{t.total}: {totalRows} · {t.page}: {page}/{totalPages}</Text>
+                <Text size="sm">CreatedAt / UpdatedAt included</Text>
+              </Group>
+
+              <Divider mb="sm" />
+
+              <Table striped highlightOnHover withTableBorder withColumnBorders>
+                <Table.Thead>
+                  <Table.Tr>
+                    <Table.Th>ID</Table.Th><Table.Th>Name</Table.Th><Table.Th>Score</Table.Th><Table.Th>Status</Table.Th>
+                    <Table.Th>Owner</Table.Th><Table.Th>Locked</Table.Th><Table.Th>Vertical</Table.Th>
+                    <Table.Th>CreatedAt</Table.Th><Table.Th>UpdatedAt</Table.Th><Table.Th>Action</Table.Th>
+                  </Table.Tr>
+                </Table.Thead>
+                <Table.Tbody>
+                  {rows.map((r) => (
+                    <Table.Tr key={r.id}>
+                      <Table.Td>{r.id}</Table.Td>
+                      <Table.Td><Text fw={600}>{r.name}</Text><Text size="xs" c="dimmed">{r.source}</Text></Table.Td>
+                      <Table.Td><Badge color={(r.tidb_potential_score ?? 0) >= 75 ? 'green' : (r.tidb_potential_score ?? 0) >= 50 ? 'yellow' : 'red'}>{r.tidb_potential_score ?? '-'}</Badge></Table.Td>
+                      <Table.Td>{r.lead_status}</Table.Td>
+                      <Table.Td>{r.owner || '-'}</Table.Td>
+                      <Table.Td>{r.manual_locked ? 'LOCKED' : '-'}</Table.Td>
+                      <Table.Td>{r.vertical}</Table.Td>
+                      <Table.Td>{r.created_at || ''}</Table.Td>
+                      <Table.Td>{r.updated_at || ''}</Table.Td>
+                      <Table.Td><Button size="xs" onClick={() => setSelected({ ...r })}>{t.edit}</Button></Table.Td>
+                    </Table.Tr>
+                  ))}
+                </Table.Tbody>
+              </Table>
+
+              <Group mt="sm" justify="space-between">
+                <Button variant="default" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>{t.prev}</Button>
+                <Button variant="default" disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)}>{t.next}</Button>
+              </Group>
+            </Paper>
+          </Tabs.Panel>
+
+          <Tabs.Panel value="enrich" pt="md">
+            <SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }} spacing="md">
+              <Card withBorder><Text size="sm" c="dimmed">Pending</Text><Title order={3}>{enrich?.stats?.pending ?? 0}</Title></Card>
+              <Card withBorder><Text size="sm" c="dimmed">Running</Text><Title order={3}>{enrich?.stats?.running ?? 0}</Title></Card>
+              <Card withBorder><Text size="sm" c="dimmed">Done</Text><Title order={3}>{enrich?.stats?.done_count ?? 0}</Title></Card>
+              <Card withBorder><Text size="sm" c="dimmed">Failed</Text><Title order={3}>{enrich?.stats?.failed ?? 0}</Title></Card>
+            </SimpleGrid>
+
+            <Paper withBorder p="md" radius="md" mt="md">
+              <Group>
+                <TextInput style={{ flex: 1 }} placeholder="IDs, e.g. 12,25,39" value={enqueueIds} onChange={(e) => setEnqueueIds(e.currentTarget.value)} />
+                <Button onClick={enqueue}>{t.enqueue}</Button>
+                <Button variant="light" onClick={runEnrichBatch}>{t.runBatch}</Button>
+              </Group>
+            </Paper>
+
+            <Paper withBorder p="md" radius="md" mt="md">
+              <Table striped>
+                <Table.Thead>
+                  <Table.Tr><Table.Th>QueueID</Table.Th><Table.Th>LeadID</Table.Th><Table.Th>Name</Table.Th><Table.Th>Status</Table.Th><Table.Th>Attempts</Table.Th><Table.Th>Updated</Table.Th></Table.Tr>
+                </Table.Thead>
+                <Table.Tbody>
+                  {(enrich?.rows || []).map((r) => (
+                    <Table.Tr key={r.id}><Table.Td>{r.id}</Table.Td><Table.Td>{r.lead_id}</Table.Td><Table.Td>{r.name || ''}</Table.Td><Table.Td>{r.status}</Table.Td><Table.Td>{r.attempts}</Table.Td><Table.Td>{r.updated_at || ''}</Table.Td></Table.Tr>
+                  ))}
+                </Table.Tbody>
+              </Table>
+            </Paper>
+          </Tabs.Panel>
+        </Tabs>
       </Stack>
 
-      <Modal opened={!!selected} onClose={() => setSelected(null)} title={selected?.name || 'Edit'} size="lg">
+      <Modal opened={!!selected} onClose={() => setSelected(null)} title={selected?.name || t.edit} size="lg">
         {selected && (
           <Stack>
-            <TextInput label="Name" value={selected.name || ''} onChange={(e)=>setSelected({...selected,name:e.currentTarget.value})} />
-            <TextInput label="Vertical" value={selected.vertical || ''} onChange={(e)=>setSelected({...selected,vertical:e.currentTarget.value})} />
-            <Select label="Status" data={["new","contacted","qualified","disqualified"]} value={selected.lead_status} onChange={(v)=>setSelected({...selected,lead_status:v||'new'})} />
-            <NumberInput label="Score" min={0} max={100} value={selected.tidb_potential_score ?? 0} onChange={(v:any)=>setSelected({...selected,tidb_potential_score: Number(v)})} />
-            <Textarea label="Reason" value={selected.tidb_potential_reason || ''} onChange={(e)=>setSelected({...selected,tidb_potential_reason:e.currentTarget.value})} />
-            <Button onClick={saveLead}>Save (lock)</Button>
+            <TextInput label="Name" value={selected.name || ''} onChange={(e) => setSelected({ ...selected, name: e.currentTarget.value })} />
+            <TextInput label="Vertical" value={selected.vertical || ''} onChange={(e) => setSelected({ ...selected, vertical: e.currentTarget.value })} />
+            <Select label="Status" data={statusOptions} value={selected.lead_status} onChange={(v) => setSelected({ ...selected, lead_status: v || 'new' })} />
+            <TextInput label="Owner" value={selected.owner || ''} onChange={(e) => setSelected({ ...selected, owner: e.currentTarget.value })} />
+            <NumberInput label="Score" min={0} max={100} value={selected.tidb_potential_score ?? 0} onChange={(v: any) => setSelected({ ...selected, tidb_potential_score: Number(v) })} />
+            <Textarea label="Reason" value={selected.tidb_potential_reason || ''} onChange={(e) => setSelected({ ...selected, tidb_potential_reason: e.currentTarget.value })} />
+            <Button onClick={saveLead}>{t.saveLock}</Button>
           </Stack>
         )}
       </Modal>
