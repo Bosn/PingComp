@@ -73,7 +73,7 @@ type EnrichPayload = {
 const I18N = {
   zh: {
     title: 'PingComp',
-    subtitle: '潜在客户人工清洗与标注 · React + Mantine',
+    subtitle: '潜在客户人工清洗与标注',
     dashboard: '仪表盘',
     leads: '线索管理',
     enrich: 'Enrich 队列',
@@ -99,7 +99,7 @@ const I18N = {
   },
   en: {
     title: 'PingComp',
-    subtitle: 'Lead ops workspace · React + Mantine',
+    subtitle: 'Lead ops workspace',
     dashboard: 'Dashboard',
     leads: 'Leads',
     enrich: 'Enrich Queue',
@@ -367,7 +367,6 @@ export function App() {
                 <Text size="sm">
                   {t.total}: {totalRows} · {t.page}: {page}/{totalPages}
                 </Text>
-                <Text size="sm">CreatedAt / UpdatedAt included</Text>
               </Group>
 
               <Divider mb="sm" />
@@ -386,6 +385,7 @@ export function App() {
                       <Table.Th>CreatedAt</Table.Th>
                       <Table.Th>UpdatedAt</Table.Th>
                       <Table.Th>Action</Table.Th>
+                      <Table.Th>Reason</Table.Th>
                     </Table.Tr>
                   </Table.Thead>
                   <Table.Tbody>
@@ -414,13 +414,14 @@ export function App() {
                           <Table.Td>{r.owner || '-'}</Table.Td>
                           <Table.Td>{r.manual_locked ? 'LOCKED' : '-'}</Table.Td>
                           <Table.Td>{r.vertical}</Table.Td>
-                          <Table.Td>{r.created_at || ''}</Table.Td>
-                          <Table.Td>{r.updated_at || ''}</Table.Td>
+                          <Table.Td>{(r.created_at || '').slice(0,10)}</Table.Td>
+                          <Table.Td>{(r.updated_at || '').slice(0,10)}</Table.Td>
                           <Table.Td>
                             <Button size="xs" onClick={() => setSelected({ ...r })}>
                               {t.edit}
                             </Button>
                           </Table.Td>
+                          <Table.Td>{r.tidb_potential_reason || ''}</Table.Td>
                         </Table.Tr>
                       ))
                     )}
@@ -498,7 +499,7 @@ export function App() {
                         <Table.Td>{r.name || ''}</Table.Td>
                         <Table.Td>{r.status}</Table.Td>
                         <Table.Td>{r.attempts}</Table.Td>
-                        <Table.Td>{r.updated_at || ''}</Table.Td>
+                        <Table.Td>{(r.updated_at || '').slice(0,10)}</Table.Td>
                       </Table.Tr>
                     ))}
                   </Table.Tbody>
