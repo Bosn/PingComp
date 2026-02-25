@@ -31,7 +31,7 @@ const I18N = {
     lockOnly: '仅锁定', prev: '上一页', next: '下一页', edit: '编辑', saveLock: '保存并锁定', total: '总线索',
     locked: '人工锁定', avg: '平均分', lockRate: '锁定占比', exportCsv: '导出CSV', runBatch: '执行一轮(20条)',
     enqueue: '入队', noData: '暂无数据', trend7d: '近7天更新趋势', scoreDist: '评分分布', enrichDist: 'Enrich状态',
-    bulkAction: '批量动作', apply: '执行', selected: '已选',
+    bulkAction: '批量动作', apply: '执行', selected: '已选', quickViews: '快捷视图',
   },
   en: {
     title: 'PingComp', subtitle: 'Lead ops workspace', dashboard: 'Dashboard', leads: 'Leads', enrich: 'Enrich Queue',
@@ -39,7 +39,7 @@ const I18N = {
     page: 'Page', lockOnly: 'Locked only', prev: 'Prev', next: 'Next', edit: 'Edit', saveLock: 'Save & lock', total: 'Total leads',
     locked: 'Manual locked', avg: 'Avg score', lockRate: 'Lock ratio', exportCsv: 'Export CSV', runBatch: 'Run batch (20)',
     enqueue: 'Enqueue', noData: 'No data', trend7d: '7-day update trend', scoreDist: 'Score distribution', enrichDist: 'Enrich status',
-    bulkAction: 'Bulk action', apply: 'Apply', selected: 'Selected',
+    bulkAction: 'Bulk action', apply: 'Apply', selected: 'Selected', quickViews: 'Quick views',
   },
 } as const;
 
@@ -158,6 +158,20 @@ export function App() {
     await Promise.all([loadLeads(), loadDashboard()]);
   }
 
+  async function applyQuickView(kind: 'high' | 'locked' | 'followup' | 'all') {
+    if (kind === 'high') {
+      setQ(''); setMinScore(80); setStatus('new'); setLockedOnly(false);
+    } else if (kind === 'locked') {
+      setQ(''); setMinScore(''); setStatus(null); setLockedOnly(true);
+    } else if (kind === 'followup') {
+      setQ(''); setMinScore(''); setStatus('contacted'); setLockedOnly(false);
+    } else {
+      setQ(''); setMinScore(''); setStatus(null); setLockedOnly(false);
+    }
+    setPage(1);
+    setTimeout(loadLeads, 0);
+  }
+
   async function runEnrichBatch() { await fetch('/api/enrich/run', { method: 'POST' }); await loadEnrich(); }
   async function enqueue() { await fetch('/api/enrich/enqueue', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids: enqueueIds }) }); setEnqueueIds(''); await loadEnrich(); }
 
@@ -233,6 +247,16 @@ export function App() {
                   <Select w={160} data={[{ value: '0', label: 'All' }, { value: '1', label: t.lockOnly }]} value={lockedOnly ? '1' : '0'} onChange={(v) => setLockedOnly(v === '1')} />
                   <Button loading={loading} onClick={() => { setPage(1); loadLeads(); }}>{t.filter}</Button>
                   <Button variant="default" onClick={() => { setQ(''); setMinScore(''); setStatus(null); setLockedOnly(false); setPage(1); setTimeout(loadLeads, 0); }}>{t.reset}</Button>
+                </Group>
+
+                <Group mt="sm" mb={2} justify="space-between" wrap="wrap">
+                  <Group gap={6}>
+                    <Text size="xs" c="dimmed">{t.quickViews}</Text>
+                    <Button size="compact-xs" variant="default" onClick={() => applyQuickView('high')}>High Potential</Button>
+                    <Button size="compact-xs" variant="default" onClick={() => applyQuickView('locked')}>Locked</Button>
+                    <Button size="compact-xs" variant="default" onClick={() => applyQuickView('followup')}>Follow-up</Button>
+                    <Button size="compact-xs" variant="subtle" onClick={() => applyQuickView('all')}>All</Button>
+                  </Group>
                 </Group>
 
                 <Group mt="sm" justify="space-between" wrap="wrap">
