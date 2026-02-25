@@ -173,8 +173,8 @@ app.get('/api/leads', async (req: Request, res: Response) => {
   let where = ' WHERE 1=1';
   const args: any[] = [];
   if (q) {
-    where += ' AND (name LIKE ? OR vertical LIKE ? OR source LIKE ? OR tags LIKE ?)';
-    args.push(`%${q}%`, `%${q}%`, `%${q}%`, `%${q}%`);
+    where += ' AND (name LIKE ? OR owner LIKE ? OR vertical LIKE ? OR source LIKE ? OR tags LIKE ?)';
+    args.push(`%${q}%`, `%${q}%`, `%${q}%`, `%${q}%`, `%${q}%`);
   }
   if (min > 0) { where += ' AND IFNULL(tidb_potential_score,0) >= ?'; args.push(min); }
   if (status) { where += ' AND lead_status=?'; args.push(status); }

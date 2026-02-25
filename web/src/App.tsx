@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
-  ActionIcon, AppShell, Avatar, Badge, Box, Button, Card, Checkbox, Divider, Group, Modal, NumberInput, Paper, ScrollArea, Select,
+  ActionIcon, AppShell, Avatar, Badge, Box, Button, Card, Checkbox, Divider, Group, Modal, NumberInput, Paper, ScrollArea, Select, Slider,
   SimpleGrid, Stack, Table, Tabs, Text, TextInput, Textarea, Title, Tooltip, useMantineColorScheme,
 } from '@mantine/core';
 import { IconActivity, IconArrowDown, IconArrowUp, IconBolt, IconBrain, IconEdit, IconFilter, IconGauge, IconMoonStars, IconSun, IconTrash, IconWorld } from '@tabler/icons-react';
@@ -27,7 +27,7 @@ type EnrichPayload = { rows: EnrichJob[]; stats: { pending: number; running: num
 type SavedView = {
   name: string;
   q: string;
-  minScore: number | '';
+  minScore: number;
   status: string | null;
   lockedOnly: boolean;
 };
@@ -35,7 +35,7 @@ type SavedView = {
 const I18N = {
   zh: {
     title: 'PingComp', subtitle: '潜在客户人工清洗与标注', dashboard: '仪表盘', leads: '线索管理', enrich: 'Enrich 队列',
-    filter: '筛选', reset: '重置', search: '搜索 name/vertical/source/tags', minScore: '最低分', status: '状态', page: '页码',
+    filter: '筛选', reset: '重置', search: '搜索 name/owner/vertical/source/tags', minScore: '最低分', status: '状态', page: '页码',
     lockOnly: '仅锁定', prev: '上一页', next: '下一页', edit: '编辑', saveLock: '保存并锁定', total: '总线索',
     locked: '人工锁定', avg: '平均分', lockRate: '锁定占比', exportCsv: '导出CSV', runBatch: '执行一轮(20条)',
     enqueue: '入队', noData: '暂无数据', trend7d: '近7天更新趋势', scoreDist: '评分分布', enrichDist: 'Enrich状态',
@@ -43,7 +43,7 @@ const I18N = {
   },
   en: {
     title: 'PingComp', subtitle: 'Lead ops workspace', dashboard: 'Dashboard', leads: 'Leads', enrich: 'Enrich Queue',
-    filter: 'Filter', reset: 'Reset', search: 'Search name/vertical/source/tags', minScore: 'Min score', status: 'Status',
+    filter: 'Filter', reset: 'Reset', search: 'Search name/owner/vertical/source/tags', minScore: 'Min score', status: 'Status',
     page: 'Page', lockOnly: 'Locked only', prev: 'Prev', next: 'Next', edit: 'Edit', saveLock: 'Save & lock', total: 'Total leads',
     locked: 'Manual locked', avg: 'Avg score', lockRate: 'Lock ratio', exportCsv: 'Export CSV', runBatch: 'Run batch (20)',
     enqueue: 'Enqueue', noData: 'No data', trend7d: '7-day update trend', scoreDist: 'Score distribution', enrichDist: 'Enrich status',
@@ -100,7 +100,7 @@ export function App() {
   const [tab, setTab] = useState<string | null>('dashboard');
   const [rows, setRows] = useState<Lead[]>([]);
   const [q, setQ] = useState('');
-  const [minScore, setMinScore] = useState<number | ''>('');
+  const [minScore, setMinScore] = useState<number>(0);
   const [status, setStatus] = useState<string | null>(null);
   const [lockedOnly, setLockedOnly] = useState<boolean>(false);
   const [page, setPage] = useState(1);
@@ -142,7 +142,7 @@ export function App() {
     setLoading(true);
     const params = new URLSearchParams();
     if (q) params.set('q', q);
-    if (minScore !== '') params.set('minScore', String(minScore));
+    if (minScore > 0) params.set('minScore', String(minScore));
     if (status) params.set('status', status);
     if (lockedOnly) params.set('locked', '1');
     params.set('page', String(page));
@@ -190,11 +190,11 @@ export function App() {
     if (kind === 'high') {
       setQ(''); setMinScore(80); setStatus('new'); setLockedOnly(false);
     } else if (kind === 'locked') {
-      setQ(''); setMinScore(''); setStatus(null); setLockedOnly(true);
+      setQ(''); setMinScore(0); setStatus(null); setLockedOnly(true);
     } else if (kind === 'followup') {
-      setQ(''); setMinScore(''); setStatus('contacted'); setLockedOnly(false);
+      setQ(''); setMinScore(0); setStatus('contacted'); setLockedOnly(false);
     } else {
-      setQ(''); setMinScore(''); setStatus(null); setLockedOnly(false);
+      setQ(''); setMinScore(0); setStatus(null); setLockedOnly(false);
     }
     setPage(1);
     setTimeout(loadLeads, 0);
@@ -299,7 +299,7 @@ export function App() {
         <Paper withBorder p="md" radius="md" style={{ backdropFilter: 'blur(8px)', boxShadow: '0 0 40px rgba(64,128,255,0.08) inset', borderColor: colorScheme === 'dark' ? 'rgba(120,140,180,0.45)' : undefined }}>
           <Group justify="space-between" align="center">
             <Group>
-              <img src="/logo.svg" alt="PingComp" width={36} height={36} />
+              <img src="/logo.svg" alt="PingComp" width={45} height={45} />
               <Stack gap={0}>
                 <Title order={2} fw={800}>{t.title}</Title>
                 <Text size="sm" c="dimmed">{t.subtitle}</Text>
@@ -365,11 +365,14 @@ export function App() {
               <Paper withBorder p="md" radius="md" style={{ borderColor: colorScheme === 'dark' ? 'rgba(120,140,180,0.35)' : undefined }}>
                 <Group wrap="wrap" align="end">
                   <TextInput leftSection={<IconFilter size={14} />} w={320} placeholder={t.search} value={q} onChange={(e) => setQ(e.currentTarget.value)} />
-                  <NumberInput w={140} placeholder={t.minScore} value={minScore} onChange={(v: any) => setMinScore(v ?? '')} min={0} max={100} allowNegative={false} />
+                  <Box w={220}>
+                    <Text size="xs" c="dimmed" mb={4}>{t.minScore}: {minScore}</Text>
+                    <Slider value={minScore} onChange={setMinScore} min={0} max={100} step={1} />
+                  </Box>
                   <Select w={170} placeholder={t.status} data={statusOptions} value={status} onChange={setStatus} clearable />
                   <Select w={160} data={[{ value: '0', label: 'All' }, { value: '1', label: t.lockOnly }]} value={lockedOnly ? '1' : '0'} onChange={(v) => setLockedOnly(v === '1')} />
                   <Button loading={loading} onClick={() => { setPage(1); loadLeads(); }}>{t.filter}</Button>
-                  <Button variant="default" onClick={() => { setQ(''); setMinScore(''); setStatus(null); setLockedOnly(false); setPage(1); setTimeout(loadLeads, 0); }}>{t.reset}</Button>
+                  <Button variant="default" onClick={() => { setQ(''); setMinScore(0); setStatus(null); setLockedOnly(false); setPage(1); setTimeout(loadLeads, 0); }}>{t.reset}</Button>
                 </Group>
 
                 <Group mt="sm" mb={2} justify="space-between" wrap="wrap">
