@@ -16,12 +16,80 @@ const authEnabled = String(process.env.AUTH0_ENABLED || '').toLowerCase() === 't
 const baseURL = process.env.APP_BASE_URL || `http://localhost:${port}`;
 
 app.get('/auth/denied', (req: Request, res: Response) => {
-  const msg = String(req.query.message || 'Only pingcap.com accounts are allowed.').replace(/[<>]/g, '');
-  res.status(403).send(`<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"/><title>Access denied</title></head><body style="font-family: -apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica,Arial,sans-serif; padding: 28px; line-height:1.5;">
-    <h2>Access denied</h2>
-    <p>${msg}</p>
-    <p><a href="/logout">Log out</a> · <a href="/login">Try another account</a></p>
-  </body></html>`);
+  const raw = String(req.query.message || '').replace(/[<>]/g, '');
+  const isAllowedDomainIssue = /access_denied|only pingcap\.com|checks\.state argument is missing|id_token not present/i.test(raw);
+  const title = 'Access restricted';
+  const primary = 'This platform is restricted to @pingcap.com accounts only.';
+  const detail = isAllowedDomainIssue ? 'Please sign in with your PingCAP Google Workspace account.' : (raw || 'Authentication failed.');
+
+  res.status(403).send(`<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>${title}</title>
+  <style>
+    :root { color-scheme: dark; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+      background: radial-gradient(1200px 700px at 10% 10%, rgba(46,129,255,.25), transparent 55%),
+                  radial-gradient(900px 600px at 85% 20%, rgba(168,85,247,.25), transparent 50%),
+                  #090d18;
+      color: #e6ecff;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+    }
+    .card {
+      width: min(680px, 100%);
+      border: 1px solid rgba(120,140,180,.35);
+      background: linear-gradient(180deg, rgba(20,27,44,.9), rgba(14,19,32,.92));
+      border-radius: 18px;
+      padding: 28px;
+      box-shadow: 0 20px 60px rgba(0,0,0,.45), inset 0 0 40px rgba(66,116,255,.08);
+    }
+    .pill {
+      display: inline-block;
+      font-size: 12px;
+      letter-spacing: .04em;
+      text-transform: uppercase;
+      padding: 6px 10px;
+      border-radius: 999px;
+      color: #c8d6ff;
+      background: rgba(80,120,255,.2);
+      border: 1px solid rgba(120,160,255,.35);
+      margin-bottom: 12px;
+    }
+    h1 { margin: 0 0 12px; font-size: 30px; line-height: 1.15; }
+    .primary { margin: 0 0 8px; font-size: 17px; color: #f0f4ff; }
+    .detail { margin: 0 0 20px; color: #b9c7ea; }
+    .actions { display: flex; gap: 10px; flex-wrap: wrap; }
+    .btn {
+      display: inline-block; text-decoration: none; font-weight: 600;
+      padding: 10px 14px; border-radius: 10px; transition: .18s ease;
+      border: 1px solid rgba(120,160,255,.35); color: #dce7ff;
+      background: rgba(60,90,180,.25);
+    }
+    .btn:hover { transform: translateY(-1px); background: rgba(80,120,255,.3); }
+    .btn.secondary { background: rgba(255,255,255,.04); border-color: rgba(255,255,255,.16); }
+  </style>
+</head>
+<body>
+  <main class="card">
+    <span class="pill">PingComp Authentication</span>
+    <h1>${title}</h1>
+    <p class="primary">${primary}</p>
+    <p class="detail">${detail}</p>
+    <div class="actions">
+      <a class="btn" href="/login">Sign in with @pingcap.com</a>
+      <a class="btn secondary" href="/logout">Log out</a>
+    </div>
+  </main>
+</body>
+</html>`);
 });
 
 // Catch Auth0 callback deny/error and show user-friendly page instead of plain "Bad request"
