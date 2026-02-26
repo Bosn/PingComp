@@ -505,7 +505,7 @@ export function App() {
                           const v = e.currentTarget.checked;
                           setSelectedIds(v ? new Set(sortedRows.map(r => r.id)) : new Set());
                         }} /></Table.Th>
-                        <SortHead label="ID" k="id" w={64} /><SortHead label="Name" k="name" w={260} /><Table.Th w={260} style={thStyle}>Source</Table.Th><SortHead label="Score" k="score" w={88} /><SortHead label="Status" k="lead_status" /><SortHead label="Owner" k="owner" />
+                        <SortHead label="ID" k="id" w={64} /><SortHead label="Name" k="name" w={160} /><Table.Th w={160} style={thStyle}>Source</Table.Th><SortHead label="Score" k="score" w={88} /><SortHead label="Status" k="lead_status" /><SortHead label="Owner" k="owner" />
                         <Table.Th w={56} style={thStyle}>Locked</Table.Th><SortHead label="Vertical" k="vertical" /><Table.Th style={thStyle}>Region</Table.Th><SortHead label="CreatedAt" k="created_at" w={122} /><SortHead label="UpdatedAt" k="updated_at" w={122} /><Table.Th w={96} style={thStyle}>Action</Table.Th><Table.Th style={{ ...thStyle, width: 420, minWidth: 420, maxWidth: 420 }}>Reason</Table.Th>
                       </Table.Tr>
                     </Table.Thead>
@@ -522,13 +522,13 @@ export function App() {
                             }} />
                           </Table.Td>
                           <Table.Td style={{ paddingTop: 6, paddingBottom: 6 }}>{r.id}</Table.Td>
-                          <Table.Td style={{ paddingTop: 6, paddingBottom: 6, maxWidth: 260 }}>
-                            <Tooltip multiline w={520} withArrow label={r.name || '-'}>
+                          <Table.Td style={{ paddingTop: 6, paddingBottom: 6, maxWidth: 160 }}>
+                            <Tooltip multiline w={480} withArrow label={r.name || '-'}>
                               <Text fw={600} size="sm" lineClamp={1} style={{ whiteSpace: 'nowrap' }}>{r.name}</Text>
                             </Tooltip>
                           </Table.Td>
-                          <Table.Td style={{ paddingTop: 6, paddingBottom: 6, maxWidth: 260 }}>
-                            <Tooltip multiline w={520} withArrow label={r.source || '-'}>
+                          <Table.Td style={{ paddingTop: 6, paddingBottom: 6, maxWidth: 160 }}>
+                            <Tooltip multiline w={480} withArrow label={r.source || '-'}>
                               <Text size="xs" c="dimmed" lineClamp={1} style={{ whiteSpace: 'nowrap' }}>{r.source || '-'}</Text>
                             </Tooltip>
                           </Table.Td>

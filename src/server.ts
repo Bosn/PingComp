@@ -342,23 +342,7 @@ app.post('/api/agent/chat', async (req: Request, res: Response) => {
     if (/\b(insert|update|delete|replace|drop|alter|truncate|create|grant|revoke|call|execute|show|desc|describe|explain|set|use|commit|rollback)\b/i.test(sql)) return false;
     if (/--|\/\*|\*\//.test(sql)) return false;
     if (/\b(information_schema|mysql\.|performance_schema|sys\.)\b/i.test(sql)) return false;
-    if (!new RegExp(`\\bfrom\\s+\\
-?\\
-?\\
-?\\?\\?`, 'i')) {
-      // noop to keep TS happy in multiline strings
-    }
-    if (!new RegExp(`\\bfrom\\s+\\
-?`).test('from ')) {
-      // noop
-    }
-    // Must query only target table
-    if (!new RegExp(`\\bfrom\\s+\\
-?\\
-?`).test('from ')) {
-      // noop
-    }
-    const fromOk = new RegExp(`\\bfrom\\s+\\` + TABLE.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&') + `\\b`, 'i').test(sql.replace(/`/g, ''));
+    const fromOk = new RegExp(`\\bfrom\\s+${TABLE}\\b`, 'i').test(sql.replace(/`/g, ''));
     if (!fromOk) return false;
     return true;
   };
@@ -379,7 +363,7 @@ app.post('/api/agent/chat', async (req: Request, res: Response) => {
         sqlUsed = sql.replace(/;\s*$/, '');
         const [qRows]: any = await conn.query(sqlUsed);
         rows = Array.isArray(qRows) ? qRows.slice(0, 200) : [];
-        mode = 'qwen-sql';
+        mode = rows.length ? 'qwen-sql' : 'fallback-60';
       } else {
         mode = 'fallback-60';
       }
@@ -392,12 +376,37 @@ app.post('/api/agent/chat', async (req: Request, res: Response) => {
   }
 
   if (mode === 'fallback-60') {
+    const regionHints: Record<string, string[]> = {
+      '华北': ['CN', 'China', 'Beijing', 'Tianjin', 'Hebei', 'Shanxi', 'Inner Mongolia'],
+      '华东': ['CN', 'China', 'Shanghai', 'Jiangsu', 'Zhejiang', 'Anhui', 'Fujian', 'Jiangxi', 'Shandong'],
+      '华南': ['CN', 'China', 'Guangdong', 'Guangxi', 'Hainan', 'Hong Kong', 'Macau']
+    };
+
+    let fallbackWhere = 'WHERE IFNULL(tidb_potential_score,0) >= 60';
+    const fallbackArgs: any[] = [];
+
+    const ownerMatch = message.match(/owner\s*(?:是|=|:)?\s*([a-zA-Z0-9_\-\u4e00-\u9fa5]+)/i);
+    if (ownerMatch?.[1]) {
+      fallbackWhere += ' AND owner LIKE ?';
+      fallbackArgs.push(`%${ownerMatch[1]}%`);
+    }
+
+    for (const k of Object.keys(regionHints)) {
+      if (message.includes(k)) {
+        const terms = regionHints[k];
+        fallbackWhere += ' AND (' + terms.map(() => 'region LIKE ?').join(' OR ') + ')';
+        for (const t of terms) fallbackArgs.push(`%${t}%`);
+        break;
+      }
+    }
+
     const [baseRows]: any = await conn.query(
       `SELECT id,name,region,owner,vertical,lead_status,manual_locked,tidb_potential_score,tidb_potential_reason,updated_at
        FROM \`${TABLE}\`
-       WHERE IFNULL(tidb_potential_score,0) >= 60
+       ${fallbackWhere}
        ORDER BY IFNULL(tidb_potential_score,0) DESC, updated_at DESC
-       LIMIT 200`
+       LIMIT 200`,
+      fallbackArgs
     );
     const pool = Array.isArray(baseRows) ? baseRows : [];
 
