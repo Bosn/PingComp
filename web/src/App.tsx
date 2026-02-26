@@ -27,6 +27,7 @@ type EnrichPayload = { rows: EnrichJob[]; stats: { pending: number; running: num
 type ChartPayload = { type: 'pie' | 'line' | 'bar'; title?: string; labels: string[]; values: number[] };
 
 type ChatTurn = { role: 'user' | 'assistant'; text: string; rows?: Lead[]; chart?: ChartPayload };
+type AgentSession = { id: string; name: string; updatedAt: number; turns: ChatTurn[] };
 
 type SavedView = {
   name: string;
@@ -44,7 +45,7 @@ const I18N = {
     lockOnly: '仅锁定', prev: '上一页', next: '下一页', edit: '编辑', saveLock: '保存并锁定', total: '总线索',
     locked: '人工锁定', avg: '平均分', lockRate: '锁定占比', exportCsv: '导出CSV', runBatch: '执行一轮(20条)',
     enqueue: '入队', noData: '暂无数据', trend7d: '近7天更新趋势', scoreDist: '评分分布', enrichDist: 'Enrich状态',
-    bulkAction: '批量动作', apply: '执行', selected: '已选', quickViews: '快捷视图', savedViews: '已保存视图', saveView: '保存当前视图', deleteView: '删除视图', viewName: '视图名', account: '账户', logout: '退出', delete: '删除', deleteConfirm: '确认删除该线索？', deleteModalTitle: '确认删除', deleteModalDesc: '删除后不可恢复，请确认操作。', cancel: '取消', confirmDelete: '确认删除', askAgent: '问问 Agent', askPlaceholder: '例如：找出 owner 为某人、分数大于80的客户',
+    bulkAction: '批量动作', apply: '执行', selected: '已选', quickViews: '快捷视图', savedViews: '已保存视图', saveView: '保存当前视图', deleteView: '删除视图', viewName: '视图名', account: '账户', logout: '退出', delete: '删除', deleteConfirm: '确认删除该线索？', deleteModalTitle: '确认删除', deleteModalDesc: '删除后不可恢复，请确认操作。', cancel: '取消', confirmDelete: '确认删除', askAgent: '问问 Agent', askPlaceholder: '例如：找出 owner 为某人、分数大于80的客户', sessions: '会话', newSession: '新建会话', deleteSession: '删除会话', sessionName: '会话名称',
   },
   en: {
     title: 'PingComp', subtitle: 'Lead ops workspace', agent: 'Agent', dashboard: 'Dashboard', leads: 'Leads', enrich: 'Enrich Queue',
@@ -52,7 +53,7 @@ const I18N = {
     page: 'Page', lockOnly: 'Locked only', prev: 'Prev', next: 'Next', edit: 'Edit', saveLock: 'Save & lock', total: 'Total leads',
     locked: 'Manual locked', avg: 'Avg score', lockRate: 'Lock ratio', exportCsv: 'Export CSV', runBatch: 'Run batch (20)',
     enqueue: 'Enqueue', noData: 'No data', trend7d: '7-day update trend', scoreDist: 'Score distribution', enrichDist: 'Enrich status',
-    bulkAction: 'Bulk action', apply: 'Apply', selected: 'Selected', quickViews: 'Quick views', savedViews: 'Saved views', saveView: 'Save current view', deleteView: 'Delete view', viewName: 'View name', account: 'Account', logout: 'Logout', delete: 'Delete', deleteConfirm: 'Delete this lead?', deleteModalTitle: 'Confirm deletion', deleteModalDesc: 'This operation cannot be undone.', cancel: 'Cancel', confirmDelete: 'Delete', askAgent: 'Ask Agent', askPlaceholder: 'e.g. find leads with score >= 80 and a specific owner',
+    bulkAction: 'Bulk action', apply: 'Apply', selected: 'Selected', quickViews: 'Quick views', savedViews: 'Saved views', saveView: 'Save current view', deleteView: 'Delete view', viewName: 'View name', account: 'Account', logout: 'Logout', delete: 'Delete', deleteConfirm: 'Delete this lead?', deleteModalTitle: 'Confirm deletion', deleteModalDesc: 'This operation cannot be undone.', cancel: 'Cancel', confirmDelete: 'Delete', askAgent: 'Ask Agent', askPlaceholder: 'e.g. find leads with score >= 80 and a specific owner', sessions: 'Sessions', newSession: 'New Session', deleteSession: 'Delete Session', sessionName: 'Session Name',
   },
 } as const;
 
@@ -179,7 +180,24 @@ export function App() {
   const [agentInput, setAgentInput] = useState('');
   const [agentLoading, setAgentLoading] = useState(false);
   const [agentComposing, setAgentComposing] = useState(false);
-  const [agentTurns, setAgentTurns] = useState<ChatTurn[]>([{ role: 'assistant', text: '我是 PingComp Agent。你可以自然语言问我潜在客户数据，例如："分数大于80且已锁定"。' }]);
+  const defaultAgentTurns: ChatTurn[] = [{ role: 'assistant', text: '我是 PingComp Agent。你可以自然语言问我潜在客户数据，例如："分数大于80且已锁定"。' }];
+  const [agentSessions, setAgentSessions] = useState<AgentSession[]>(() => {
+    try {
+      const raw = localStorage.getItem('pingcomp_agent_sessions');
+      const arr = raw ? JSON.parse(raw) : [];
+      if (Array.isArray(arr) && arr.length) return arr;
+    } catch {}
+    return [{ id: `s_${Date.now()}`, name: 'Session 1', updatedAt: Date.now(), turns: defaultAgentTurns }];
+  });
+  const [currentSessionId, setCurrentSessionId] = useState<string>(() => {
+    const saved = localStorage.getItem('pingcomp_agent_current_session');
+    return saved || '';
+  });
+  const currentSession = useMemo(() => {
+    if (!agentSessions.length) return null;
+    return agentSessions.find(s => s.id === currentSessionId) || agentSessions[0];
+  }, [agentSessions, currentSessionId]);
+  const agentTurns = currentSession?.turns || defaultAgentTurns;
   const [dash, setDash] = useState<DashboardPayload | null>(null);
   const [enrich, setEnrich] = useState<EnrichPayload | null>(null);
   const [enqueueIds, setEnqueueIds] = useState('');
@@ -277,11 +295,21 @@ export function App() {
     if (tab) localStorage.setItem('pingcomp_tab', tab);
   }, [tab]);
 
+  useEffect(() => {
+    if (!agentSessions.length) return;
+    localStorage.setItem('pingcomp_agent_sessions', JSON.stringify(agentSessions));
+    const active = currentSessionId || agentSessions[0].id;
+    localStorage.setItem('pingcomp_agent_current_session', active);
+  }, [agentSessions, currentSessionId]);
+
+
 
   async function askAgent() {
     const q = agentInput.trim();
     if (!q || agentLoading) return;
-    setAgentTurns(prev => [...prev, { role: 'user', text: q }]);
+    const sid = currentSession?.id;
+    if (!sid) return;
+    setAgentSessions(prev => prev.map(ss => ss.id === sid ? { ...ss, updatedAt: Date.now(), turns: [...ss.turns, { role: 'user', text: q }] } : ss));
     setAgentInput('');
     setAgentLoading(true);
     try {
@@ -289,12 +317,36 @@ export function App() {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message: q })
       });
       const j = await r.json();
-      setAgentTurns(prev => [...prev, { role: 'assistant', text: j.reply || 'Done', rows: j.rows || [], chart: j.chart || undefined }]);
+      setAgentSessions(prev => prev.map(ss => ss.id === currentSession?.id ? { ...ss, updatedAt: Date.now(), turns: [...ss.turns, { role: 'assistant', text: j.reply || 'Done', rows: j.rows || [], chart: j.chart || undefined }] } : ss));
     } catch (e: any) {
-      setAgentTurns(prev => [...prev, { role: 'assistant', text: `请求失败：${e?.message || e}` }]);
+      setAgentSessions(prev => prev.map(ss => ss.id === currentSession?.id ? { ...ss, updatedAt: Date.now(), turns: [...ss.turns, { role: 'assistant', text: `请求失败：${e?.message || e}` }] } : ss));
     } finally {
       setAgentLoading(false);
     }
+  }
+
+
+  function createSession() {
+    const id = `s_${Date.now()}`;
+    const next: AgentSession = { id, name: `Session ${agentSessions.length + 1}`, updatedAt: Date.now(), turns: defaultAgentTurns };
+    setAgentSessions(prev => [next, ...prev]);
+    setCurrentSessionId(id);
+  }
+
+  function deleteCurrentSession() {
+    if (!currentSession) return;
+    const ok = window.confirm('Delete current session?');
+    if (!ok) return;
+    setAgentSessions(prev => {
+      const next = prev.filter(x => x.id !== currentSession.id);
+      if (!next.length) {
+        const seed: AgentSession = { id: `s_${Date.now()}`, name: 'Session 1', updatedAt: Date.now(), turns: defaultAgentTurns };
+        setCurrentSessionId(seed.id);
+        return [seed];
+      }
+      setCurrentSessionId(next[0].id);
+      return next;
+    });
   }
 
   async function saveLead() {
@@ -473,6 +525,16 @@ export function App() {
             <Box px="xs">
               <Paper withBorder p="md" radius="md" style={{ borderColor: colorScheme === 'dark' ? 'rgba(120,140,180,0.35)' : undefined }}>
                 <Stack gap="sm">
+                  <Group justify="space-between" wrap="wrap">
+                    <Group>
+                      <Text size="sm" c="dimmed">{t.sessions}</Text>
+                      <Select w={220} data={agentSessions.map(s0 => ({ value: s0.id, label: s0.name }))} value={currentSession?.id || null} onChange={(v) => setCurrentSessionId(v || '')} />
+                    </Group>
+                    <Group>
+                      <Button size="xs" variant="default" onClick={createSession}>{t.newSession}</Button>
+                      <Button size="xs" color="red" variant="light" onClick={deleteCurrentSession}>{t.deleteSession}</Button>
+                    </Group>
+                  </Group>
                   <ScrollArea h={420}>
                     <Stack gap="sm">
                       {agentTurns.map((t0, i) => (
