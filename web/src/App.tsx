@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
-  ActionIcon, AppShell, Avatar, Badge, Box, Button, Card, Checkbox, Divider, Group, Modal, NumberInput, Paper, ScrollArea, Select, Slider,
+  ActionIcon, Anchor, AppShell, Avatar, Badge, Box, Button, Card, Checkbox, Divider, Group, Modal, NumberInput, Paper, ScrollArea, Select, Slider,
   SimpleGrid, Stack, Table, Tabs, Text, TextInput, Textarea, Title, Tooltip, useMantineColorScheme,
 } from '@mantine/core';
 import { IconActivity, IconArrowDown, IconArrowUp, IconBolt, IconBrain, IconEdit, IconFilter, IconGauge, IconLock, IconMessageCircle, IconMoonStars, IconSend, IconSun, IconTrash, IconWorld } from '@tabler/icons-react';
@@ -38,7 +38,7 @@ type SavedView = {
 const I18N = {
   zh: {
     title: 'PingComp', subtitle: '潜在客户人工清洗与标注', agent: 'Agent', dashboard: '仪表盘', leads: '线索管理', enrich: 'Enrich 队列',
-    filter: '筛选', reset: '重置', search: '搜索 name/owner/vertical/source/tags', minScore: '最低分', status: '状态', region: '国家/地区', page: '页码',
+    filter: '筛选', reset: '重置', search: '搜索 name/owner/vertical/source/tags', minScore: '最低分', status: '状态', region: '国家/地区', page: '页码', pageSize: '每页条数',
     lockOnly: '仅锁定', prev: '上一页', next: '下一页', edit: '编辑', saveLock: '保存并锁定', total: '总线索',
     locked: '人工锁定', avg: '平均分', lockRate: '锁定占比', exportCsv: '导出CSV', runBatch: '执行一轮(20条)',
     enqueue: '入队', noData: '暂无数据', trend7d: '近7天更新趋势', scoreDist: '评分分布', enrichDist: 'Enrich状态',
@@ -46,7 +46,7 @@ const I18N = {
   },
   en: {
     title: 'PingComp', subtitle: 'Lead ops workspace', agent: 'Agent', dashboard: 'Dashboard', leads: 'Leads', enrich: 'Enrich Queue',
-    filter: 'Filter', reset: 'Reset', search: 'Search name/owner/vertical/source/tags', minScore: 'Min score', status: 'Status', region: 'Country/Region',
+    filter: 'Filter', reset: 'Reset', search: 'Search name/owner/vertical/source/tags', minScore: 'Min score', status: 'Status', region: 'Country/Region', pageSize: 'Page size',
     page: 'Page', lockOnly: 'Locked only', prev: 'Prev', next: 'Next', edit: 'Edit', saveLock: 'Save & lock', total: 'Total leads',
     locked: 'Manual locked', avg: 'Avg score', lockRate: 'Lock ratio', exportCsv: 'Export CSV', runBatch: 'Run batch (20)',
     enqueue: 'Enqueue', noData: 'No data', trend7d: '7-day update trend', scoreDist: 'Score distribution', enrichDist: 'Enrich status',
@@ -108,6 +108,7 @@ export function App() {
   const [region, setRegion] = useState<string | null>(null);
   const [lockedOnly, setLockedOnly] = useState<boolean>(false);
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState<string>('15');
   const [totalPages, setTotalPages] = useState(1);
   const [totalRows, setTotalRows] = useState(0);
   const [selected, setSelected] = useState<Lead | null>(null);
@@ -163,7 +164,7 @@ export function App() {
     if (lockedOnly) params.set('locked', '1');
     const activePage = pageOverride ?? page;
     params.set('page', String(activePage));
-    params.set('pageSize', '50');
+    params.set('pageSize', String(Number(pageSize) || 15));
     const sortMap: Record<string, string> = {
       id: 'id', name: 'name', score: 'score', lead_status: 'status', owner: 'owner', vertical: 'vertical', created_at: 'created', updated_at: 'updated'
     };
@@ -186,7 +187,7 @@ export function App() {
       loadLeads(1);
     }, 320);
     return () => window.clearTimeout(h);
-  }, [q, minScore, status, region, lockedOnly, sortKey, sortDir, tab]);
+  }, [q, minScore, status, region, lockedOnly, sortKey, sortDir, pageSize, tab]);
 
   useEffect(() => {
     if (tab !== 'leads') return;
@@ -527,9 +528,15 @@ export function App() {
                   </Table>
                 </ScrollArea>
 
-                <Group mt="sm" justify="space-between">
-                  <Button variant="default" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>{t.prev}</Button>
-                  <Button variant="default" disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)}>{t.next}</Button>
+                <Group mt="sm" justify="space-between" wrap="wrap">
+                  <Group>
+                    <Text size="sm" c="dimmed">{t.pageSize}</Text>
+                    <Select w={92} data={[{value:'15',label:'15'},{value:'30',label:'30'},{value:'50',label:'50'},{value:'100',label:'100'}]} value={pageSize} onChange={(v) => { setPageSize(v || '15'); setPage(1); }} />
+                  </Group>
+                  <Group>
+                    <Button variant="default" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>{t.prev}</Button>
+                    <Button variant="default" disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)}>{t.next}</Button>
+                  </Group>
                 </Group>
               </Paper>
             </Box>
@@ -601,7 +608,10 @@ export function App() {
 
       <Group justify="center" mt="md" mb="xs">
         <Text size="xs" c="dimmed">
-          Powered by <a href="https://tidbcloud.com" target="_blank" rel="noreferrer">TiDB Cloud</a> &amp; <a href="https://openclaw.ai" target="_blank" rel="noreferrer">OpenClaw</a>
+          Powered by{' '}
+          <Anchor href="https://tidbcloud.com" target="_blank" rel="noreferrer" underline="hover" c="blue.4">TiDB Cloud</Anchor>
+          {' '} &amp; {' '}
+          <Anchor href="https://openclaw.ai" target="_blank" rel="noreferrer" underline="hover" c="violet.4">OpenClaw</Anchor>
         </Text>
       </Group>
 
