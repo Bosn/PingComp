@@ -8,7 +8,7 @@ import { IconActivity, IconArrowDown, IconArrowUp, IconBolt, IconBrain, IconEdit
 type Lead = {
   id: number; name: string; region?: string; vertical: string; source: string;
   tidb_potential_score: number | null; tidb_potential_reason: string; lead_status: string; owner: string;
-  manual_locked: number; created_at?: string; updated_at?: string; funding?: string; linkedin?: string;
+  manual_locked: number; creator?: string; created_at?: string; updated_at?: string; funding?: string; linkedin?: string;
   latest_news?: string; manual_note?: string; tags?: string; source_confidence?: number | null; enrich_status?: string;
 };
 
@@ -41,7 +41,7 @@ type SavedView = {
 const I18N = {
   zh: {
     title: 'PingComp', subtitle: '潜在客户人工清洗与标注', agent: 'Agent', dashboard: '仪表盘', leads: '线索管理', enrich: 'Enrich 队列',
-    filter: '筛选', reset: '重置', search: '搜索 name/owner/vertical/source/tags', minScore: '最低分', status: '状态', region: '国家/地区', page: '页码', pageSize: '每页条数',
+    filter: '筛选', reset: '重置', search: '搜索 name/owner/vertical/source/tags', minScore: '最低分', status: '状态', region: '国家/地区', creator: 'Creator', page: '页码', pageSize: '每页条数',
     lockOnly: '仅锁定', prev: '上一页', next: '下一页', edit: '编辑', saveLock: '保存并锁定', total: '总线索',
     locked: '人工锁定', avg: '平均分', lockRate: '锁定占比', exportCsv: '导出CSV', runBatch: '执行一轮(20条)',
     enqueue: '入队', noData: '暂无数据', trend7d: '近7天更新趋势', scoreDist: '评分分布', enrichDist: 'Enrich状态',
@@ -49,7 +49,7 @@ const I18N = {
   },
   en: {
     title: 'PingComp', subtitle: 'Lead ops workspace', agent: 'Agent', dashboard: 'Dashboard', leads: 'Leads', enrich: 'Enrich Queue',
-    filter: 'Filter', reset: 'Reset', search: 'Search name/owner/vertical/source/tags', minScore: 'Min score', status: 'Status', region: 'Country/Region', pageSize: 'Page size',
+    filter: 'Filter', reset: 'Reset', search: 'Search name/owner/vertical/source/tags', minScore: 'Min score', status: 'Status', region: 'Country/Region', creator: 'Creator', pageSize: 'Page size',
     page: 'Page', lockOnly: 'Locked only', prev: 'Prev', next: 'Next', edit: 'Edit', saveLock: 'Save & lock', total: 'Total leads',
     locked: 'Manual locked', avg: 'Avg score', lockRate: 'Lock ratio', exportCsv: 'Export CSV', runBatch: 'Run batch (20)',
     enqueue: 'Enqueue', noData: 'No data', trend7d: '7-day update trend', scoreDist: 'Score distribution', enrichDist: 'Enrich status',
@@ -641,12 +641,12 @@ export function App() {
                           setSelectedIds(v ? new Set(sortedRows.map(r => r.id)) : new Set());
                         }} /></Table.Th>
                         <SortHead label="ID" k="id" w={64} /><SortHead label="Name" k="name" w={160} /><Table.Th w={160} style={thStyle}>Source</Table.Th><SortHead label="Score" k="score" w={88} /><SortHead label="Status" k="lead_status" /><SortHead label="Owner" k="owner" />
-                        <Table.Th w={56} style={thStyle}>Locked</Table.Th><SortHead label="Vertical" k="vertical" /><Table.Th style={thStyle}>Region</Table.Th><SortHead label="CreatedAt" k="created_at" w={122} /><SortHead label="UpdatedAt" k="updated_at" w={122} /><Table.Th w={96} style={thStyle}>Action</Table.Th><Table.Th style={{ ...thStyle, width: 420, minWidth: 420, maxWidth: 420 }}>Reason</Table.Th>
+                        <Table.Th w={56} style={thStyle}>Locked</Table.Th><SortHead label="Vertical" k="vertical" /><Table.Th style={thStyle}>Region</Table.Th><SortHead label="CreatedAt" k="created_at" w={122} /><SortHead label="UpdatedAt" k="updated_at" w={122} /><Table.Th w={96} style={thStyle}>Action</Table.Th><Table.Th style={{ ...thStyle, width: 420, minWidth: 420, maxWidth: 420 }}>Reason</Table.Th><Table.Th style={thStyle}>{t.creator}</Table.Th>
                       </Table.Tr>
                     </Table.Thead>
                     <Table.Tbody>
                       {rows.length === 0 ? (
-                        <Table.Tr><Table.Td colSpan={14}><Text c="dimmed" ta="center" py="md">{t.noData}</Text></Table.Td></Table.Tr>
+                        <Table.Tr><Table.Td colSpan={15}><Text c="dimmed" ta="center" py="md">{t.noData}</Text></Table.Td></Table.Tr>
                       ) : rows.map((r) => (
                         <Table.Tr key={r.id} style={recentEditedIds.has(r.id) ? { background: 'rgba(34,197,94,0.12)', transition: 'background 220ms ease' } : { transition: 'background 220ms ease' }}>
                           <Table.Td>
@@ -681,6 +681,7 @@ export function App() {
                               <Text size="sm" lineClamp={1}>{r.tidb_potential_reason || ''}</Text>
                             </Tooltip>
                           </Table.Td>
+                          <Table.Td style={{ paddingTop: 6, paddingBottom: 6 }}><Text size="xs" c="dimmed" lineClamp={1}>{r.creator || '-'}</Text></Table.Td>
                         </Table.Tr>
                       ))}
                     </Table.Tbody>
