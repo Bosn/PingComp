@@ -100,12 +100,12 @@ export function App() {
   const { lang, setLang } = useLocalLang();
   const t = I18N[lang];
 
-  const [tab, setTab] = useState<string | null>('agent');
+  const [tab, setTab] = useState<string | null>(() => localStorage.getItem('pingcomp_tab') || 'agent');
   const [rows, setRows] = useState<Lead[]>([]);
   const [q, setQ] = useState('');
   const [minScore, setMinScore] = useState<number>(0);
   const [status, setStatus] = useState<string | null>(null);
-  const [region, setRegion] = useState('');
+  const [region, setRegion] = useState<string | null>(null);
   const [lockedOnly, setLockedOnly] = useState<boolean>(false);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
@@ -137,6 +137,12 @@ export function App() {
     { value: 'qualified', label: 'qualified' }, { value: 'disqualified', label: 'disqualified' },
   ], []);
 
+  const regionOptions = useMemo(() => {
+    const set = new Set<string>();
+    for (const r of rows) { if (r.region) set.add(String(r.region)); }
+    return Array.from(set).sort().map(v => ({ value: v, label: v }));
+  }, [rows]);
+
   const bulkOptions = useMemo(() => [
     { value: 'lock', label: 'lock' },
     { value: 'unlock', label: 'unlock' },
@@ -153,7 +159,7 @@ export function App() {
     if (q) params.set('q', q);
     if (minScore > 0) params.set('minScore', String(minScore));
     if (status) params.set('status', status);
-    if (region.trim()) params.set('region', region.trim());
+    if ((region || '').trim()) params.set('region', (region || '').trim());
     if (lockedOnly) params.set('locked', '1');
     const activePage = pageOverride ?? page;
     params.set('page', String(activePage));
@@ -190,6 +196,10 @@ export function App() {
   useEffect(() => {
     fetch('/api/auth/me').then(r => r.ok ? r.json() : null).then(j => setMe(j?.user || null)).catch(() => setMe(null));
   }, []);
+
+  useEffect(() => {
+    if (tab) localStorage.setItem('pingcomp_tab', tab);
+  }, [tab]);
 
 
   async function askAgent() {
@@ -236,13 +246,13 @@ export function App() {
 
   async function applyQuickView(kind: 'high' | 'locked' | 'followup' | 'all') {
     if (kind === 'high') {
-      setQ(''); setMinScore(80); setStatus('new'); setRegion(''); setLockedOnly(false);
+      setQ(''); setMinScore(80); setStatus('new'); setRegion(null); setLockedOnly(false);
     } else if (kind === 'locked') {
-      setQ(''); setMinScore(0); setStatus(null); setRegion(''); setLockedOnly(true);
+      setQ(''); setMinScore(0); setStatus(null); setRegion(null); setLockedOnly(true);
     } else if (kind === 'followup') {
-      setQ(''); setMinScore(0); setStatus('contacted'); setRegion(''); setLockedOnly(false);
+      setQ(''); setMinScore(0); setStatus('contacted'); setRegion(null); setLockedOnly(false);
     } else {
-      setQ(''); setMinScore(0); setStatus(null); setRegion(''); setLockedOnly(false);
+      setQ(''); setMinScore(0); setStatus(null); setRegion(null); setLockedOnly(false);
     }
     setPage(1);
   }
@@ -267,7 +277,7 @@ export function App() {
     setSelectedSavedView(name);
     const v = savedViews.find(x => x.name === name);
     if (!v) return;
-    setQ(v.q); setMinScore(v.minScore); setStatus(v.status); setRegion(v.region || ''); setLockedOnly(v.lockedOnly);
+    setQ(v.q); setMinScore(v.minScore); setStatus(v.status); setRegion(v.region || null); setLockedOnly(v.lockedOnly);
     setPage(1);
   }
 
@@ -377,9 +387,9 @@ export function App() {
         <Tabs value={tab} onChange={setTab}>
           <Tabs.List>
             <Tabs.Tab value="agent" leftSection={<IconMessageCircle size={14} />}>{t.agent}</Tabs.Tab>
-            <Tabs.Tab value="dashboard" leftSection={<IconGauge size={14} />}>{t.dashboard}</Tabs.Tab>
             <Tabs.Tab value="leads" leftSection={<IconBrain size={14} />}>{t.leads}</Tabs.Tab>
             <Tabs.Tab value="enrich" leftSection={<IconBolt size={14} />}>{t.enrich}</Tabs.Tab>
+            <Tabs.Tab value="dashboard" leftSection={<IconGauge size={14} />}>{t.dashboard}</Tabs.Tab>
           </Tabs.List>
 
 
@@ -427,32 +437,6 @@ export function App() {
             </Box>
           </Tabs.Panel>
 
-          <Tabs.Panel value="dashboard" pt="md">
-            <Box px="xs">
-              <SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }} spacing="md">
-                <Card withBorder shadow="sm" radius="md" style={{ transition: 'transform .18s ease, box-shadow .18s ease' }}><Text size="sm" c="dimmed">{t.total}</Text><Title order={3} fw={700}>{dash?.total ?? '-'}</Title></Card>
-                <Card withBorder shadow="sm" radius="md" style={{ transition: 'transform .18s ease, box-shadow .18s ease' }}><Text size="sm" c="dimmed">{t.locked}</Text><Title order={3} fw={700}>{dash?.locked ?? '-'}</Title></Card>
-                <Card withBorder shadow="sm" radius="md" style={{ transition: 'transform .18s ease, box-shadow .18s ease' }}><Text size="sm" c="dimmed">{t.avg}</Text><Title order={3} fw={700}>{dash?.avgScore ?? '-'}</Title></Card>
-                <Card withBorder shadow="sm" radius="md" style={{ transition: 'transform .18s ease, box-shadow .18s ease' }}><Text size="sm" c="dimmed">{t.lockRate}</Text><Title order={3} fw={700}>{dash?.total ? Math.round((dash.locked / dash.total) * 100) : 0}%</Title></Card>
-              </SimpleGrid>
-
-              <SimpleGrid cols={{ base: 1, lg: 3 }} spacing="md" mt="md">
-                <Card withBorder radius="md">
-                  <Title order={4} mb="sm">{t.trend7d}</Title>
-                  <TrendSparkline data={dash?.dailyTrend || []} />
-                  <Text size="xs" c="dimmed" mt={6}>{(dash?.dailyTrend || []).map(x => `${x.d.slice(5)}:${x.c}`).join(' · ')}</Text>
-                </Card>
-                <Card withBorder radius="md">
-                  <Title order={4} mb="sm">{t.scoreDist}</Title>
-                  <HorizontalBars rows={(dash?.scoreBuckets || []).map(x => ({ k: x.bucket, v: x.c }))} />
-                </Card>
-                <Card withBorder radius="md">
-                  <Title order={4} mb="sm">{t.enrichDist}</Title>
-                  <HorizontalBars rows={(dash?.enrichRows || []).map(x => ({ k: x.enrich_status || 'unknown', v: x.c }))} />
-                </Card>
-              </SimpleGrid>
-            </Box>
-          </Tabs.Panel>
 
           <Tabs.Panel value="leads" pt="md">
             <Box px="xs">
@@ -464,9 +448,9 @@ export function App() {
                     <Slider value={minScore} onChange={setMinScore} min={0} max={100} step={1} />
                   </Box>
                   <Select w={170} placeholder={t.status} data={statusOptions} value={status} onChange={setStatus} clearable />
-                  <TextInput w={170} placeholder={t.region} value={region} onChange={(e) => setRegion(e.currentTarget.value)} />
+                  <Select w={190} placeholder={t.region} data={regionOptions} value={region} onChange={setRegion} searchable clearable />
                   <Select w={160} data={[{ value: '0', label: 'All' }, { value: '1', label: t.lockOnly }]} value={lockedOnly ? '1' : '0'} onChange={(v) => setLockedOnly(v === '1')} />
-                  <Button variant="default" onClick={() => { setQ(''); setMinScore(0); setStatus(null); setRegion(''); setLockedOnly(false); setPage(1); }}>{t.reset}</Button>
+                  <Button variant="default" onClick={() => { setQ(''); setMinScore(0); setStatus(null); setRegion(null); setLockedOnly(false); setPage(1); }}>{t.reset}</Button>
                 </Group>
 
                 <Group mt="sm" mb={2} justify="space-between" wrap="wrap">
@@ -506,12 +490,12 @@ export function App() {
                           setSelectedIds(v ? new Set(sortedRows.map(r => r.id)) : new Set());
                         }} /></Table.Th>
                         <SortHead label="ID" k="id" w={64} /><SortHead label="Name" k="name" /><SortHead label="Score" k="score" w={88} /><SortHead label="Status" k="lead_status" /><SortHead label="Owner" k="owner" />
-                        <Table.Th w={56} style={thStyle}>Locked</Table.Th><SortHead label="Vertical" k="vertical" /><SortHead label="CreatedAt" k="created_at" w={122} /><SortHead label="UpdatedAt" k="updated_at" w={122} /><Table.Th w={96} style={thStyle}>Action</Table.Th><Table.Th style={{ ...thStyle, width: 420, minWidth: 420, maxWidth: 420 }}>Reason</Table.Th>
+                        <Table.Th w={56} style={thStyle}>Locked</Table.Th><SortHead label="Vertical" k="vertical" /><Table.Th style={thStyle}>Region</Table.Th><SortHead label="CreatedAt" k="created_at" w={122} /><SortHead label="UpdatedAt" k="updated_at" w={122} /><Table.Th w={96} style={thStyle}>Action</Table.Th><Table.Th style={{ ...thStyle, width: 420, minWidth: 420, maxWidth: 420 }}>Reason</Table.Th>
                       </Table.Tr>
                     </Table.Thead>
                     <Table.Tbody>
                       {rows.length === 0 ? (
-                        <Table.Tr><Table.Td colSpan={12}><Text c="dimmed" ta="center" py="md">{t.noData}</Text></Table.Td></Table.Tr>
+                        <Table.Tr><Table.Td colSpan={13}><Text c="dimmed" ta="center" py="md">{t.noData}</Text></Table.Td></Table.Tr>
                       ) : rows.map((r) => (
                         <Table.Tr key={r.id} style={recentEditedIds.has(r.id) ? { background: 'rgba(34,197,94,0.12)', transition: 'background 220ms ease' } : { transition: 'background 220ms ease' }}>
                           <Table.Td>
@@ -528,6 +512,7 @@ export function App() {
                           <Table.Td>{r.owner || '-'}</Table.Td>
                           <Table.Td>{r.manual_locked ? <Tooltip label="LOCKED" withArrow><ActionIcon variant="light" color="violet" size="sm"><IconLock size={13} /></ActionIcon></Tooltip> : '-'}</Table.Td>
                           <Table.Td>{r.vertical}</Table.Td>
+                          <Table.Td>{r.region || '-'}</Table.Td>
                           <Table.Td style={{ whiteSpace: 'nowrap' }}>{(r.created_at || '').slice(0, 10)}</Table.Td>
                           <Table.Td style={{ whiteSpace: 'nowrap' }}>{(r.updated_at || '').slice(0, 10)}</Table.Td>
                           <Table.Td><Group gap={6}><ActionIcon variant="light" color="blue" onClick={() => setSelected({ ...r })} title={t.edit}><IconEdit size={14} /></ActionIcon><ActionIcon variant="light" color="red" onClick={() => requestDeleteOne(r.id)} title={t.delete}><IconTrash size={14} /></ActionIcon></Group></Table.Td>
@@ -581,6 +566,33 @@ export function App() {
                   </Table>
                 </ScrollArea>
               </Paper>
+            </Box>
+          </Tabs.Panel>
+
+          <Tabs.Panel value="dashboard" pt="md">
+            <Box px="xs">
+              <SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }} spacing="md">
+                <Card withBorder shadow="sm" radius="md" style={{ transition: 'transform .18s ease, box-shadow .18s ease' }}><Text size="sm" c="dimmed">{t.total}</Text><Title order={3} fw={700}>{dash?.total ?? '-'}</Title></Card>
+                <Card withBorder shadow="sm" radius="md" style={{ transition: 'transform .18s ease, box-shadow .18s ease' }}><Text size="sm" c="dimmed">{t.locked}</Text><Title order={3} fw={700}>{dash?.locked ?? '-'}</Title></Card>
+                <Card withBorder shadow="sm" radius="md" style={{ transition: 'transform .18s ease, box-shadow .18s ease' }}><Text size="sm" c="dimmed">{t.avg}</Text><Title order={3} fw={700}>{dash?.avgScore ?? '-'}</Title></Card>
+                <Card withBorder shadow="sm" radius="md" style={{ transition: 'transform .18s ease, box-shadow .18s ease' }}><Text size="sm" c="dimmed">{t.lockRate}</Text><Title order={3} fw={700}>{dash?.total ? Math.round((dash.locked / dash.total) * 100) : 0}%</Title></Card>
+              </SimpleGrid>
+
+              <SimpleGrid cols={{ base: 1, lg: 3 }} spacing="md" mt="md">
+                <Card withBorder radius="md">
+                  <Title order={4} mb="sm">{t.trend7d}</Title>
+                  <TrendSparkline data={dash?.dailyTrend || []} />
+                  <Text size="xs" c="dimmed" mt={6}>{(dash?.dailyTrend || []).map(x => `${x.d.slice(5)}:${x.c}`).join(' · ')}</Text>
+                </Card>
+                <Card withBorder radius="md">
+                  <Title order={4} mb="sm">{t.scoreDist}</Title>
+                  <HorizontalBars rows={(dash?.scoreBuckets || []).map(x => ({ k: x.bucket, v: x.c }))} />
+                </Card>
+                <Card withBorder radius="md">
+                  <Title order={4} mb="sm">{t.enrichDist}</Title>
+                  <HorizontalBars rows={(dash?.enrichRows || []).map(x => ({ k: x.enrich_status || 'unknown', v: x.c }))} />
+                </Card>
+              </SimpleGrid>
             </Box>
           </Tabs.Panel>
         </Tabs>
