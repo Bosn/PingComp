@@ -473,6 +473,26 @@ app.get('/api/export.csv', async (req: Request, res: Response) => {
 });
 
 
+
+app.get('/api/regions', async (req: Request, res: Response) => {
+  const q = String(req.query.q || '').trim();
+  const conn = await getConn();
+  const args: any[] = [];
+  let where = "WHERE region IS NOT NULL AND region <> ''";
+  if (q) {
+    where += " AND region LIKE ?";
+    args.push(`%${q}%`);
+  }
+  const [rows]: any = await conn.query(
+    `SELECT region, COUNT(*) c FROM \`${TABLE}\` ${where} GROUP BY region ORDER BY c DESC, region ASC LIMIT 100`,
+    args
+  );
+  await conn.end();
+  res.json({
+    rows: (rows || []).map((r: any) => ({ value: r.region, label: r.region, count: Number(r.c || 0) }))
+  });
+});
+
 app.get('/api/dashboard', async (_req: Request, res: Response) => {
   const conn = await getConn();
   const [[tot]]: any = await conn.query(`SELECT COUNT(*) c FROM \`${TABLE}\``);

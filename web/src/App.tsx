@@ -106,6 +106,9 @@ export function App() {
   const [minScore, setMinScore] = useState<number>(0);
   const [status, setStatus] = useState<string | null>(null);
   const [region, setRegion] = useState<string | null>(null);
+  const [regionOptions, setRegionOptions] = useState<Array<{ value: string; label: string }>>([]);
+  const [regionSearch, setRegionSearch] = useState('');
+  const [regionLoading, setRegionLoading] = useState(false);
   const [lockedOnly, setLockedOnly] = useState<boolean>(false);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState<string>('15');
@@ -137,12 +140,6 @@ export function App() {
     { value: 'new', label: 'new' }, { value: 'contacted', label: 'contacted' },
     { value: 'qualified', label: 'qualified' }, { value: 'disqualified', label: 'disqualified' },
   ], []);
-
-  const regionOptions = useMemo(() => {
-    const set = new Set<string>();
-    for (const r of rows) { if (r.region) set.add(String(r.region)); }
-    return Array.from(set).sort().map(v => ({ value: v, label: v }));
-  }, [rows]);
 
   const bulkOptions = useMemo(() => [
     { value: 'lock', label: 'lock' },
@@ -178,7 +175,18 @@ export function App() {
   async function loadDashboard() { const r = await fetch('/api/dashboard'); setDash(await r.json()); }
   async function loadEnrich() { const r = await fetch('/api/enrich/queue'); setEnrich(await r.json()); }
 
-  useEffect(() => { if (tab === 'dashboard') loadDashboard(); if (tab === 'enrich') loadEnrich(); if (tab === 'leads') loadLeads(); }, [tab]);
+  async function loadRegions(q = '') {
+    setRegionLoading(true);
+    try {
+      const r = await fetch(`/api/regions?q=${encodeURIComponent(q)}`);
+      const j = await r.json();
+      setRegionOptions((j.rows || []).map((x: any) => ({ value: x.value, label: x.label })));
+    } finally {
+      setRegionLoading(false);
+    }
+  }
+
+  useEffect(() => { if (tab === 'dashboard') loadDashboard(); if (tab === 'enrich') loadEnrich(); if (tab === 'leads') { loadLeads(); loadRegions(''); } }, [tab]);
 
   useEffect(() => {
     if (tab !== 'leads') return;
@@ -197,6 +205,13 @@ export function App() {
   useEffect(() => {
     fetch('/api/auth/me').then(r => r.ok ? r.json() : null).then(j => setMe(j?.user || null)).catch(() => setMe(null));
   }, []);
+
+  useEffect(() => {
+    if (tab !== 'leads') return;
+    const h = window.setTimeout(() => loadRegions(regionSearch), 260);
+    return () => window.clearTimeout(h);
+  }, [regionSearch, tab]);
+
 
   useEffect(() => {
     if (tab) localStorage.setItem('pingcomp_tab', tab);
@@ -449,7 +464,7 @@ export function App() {
                     <Slider value={minScore} onChange={setMinScore} min={0} max={100} step={1} />
                   </Box>
                   <Select w={170} placeholder={t.status} data={statusOptions} value={status} onChange={setStatus} clearable />
-                  <Select w={190} placeholder={t.region} data={regionOptions} value={region} onChange={setRegion} searchable clearable />
+                  <Select w={210} placeholder={t.region} data={regionOptions} value={region} onChange={setRegion} searchable clearable searchValue={regionSearch} onSearchChange={setRegionSearch} rightSection={regionLoading ? <Text size="xs" c="dimmed">...</Text> : null} />
                   <Select w={160} data={[{ value: '0', label: 'All' }, { value: '1', label: t.lockOnly }]} value={lockedOnly ? '1' : '0'} onChange={(v) => setLockedOnly(v === '1')} />
                   <Button variant="default" onClick={() => { setQ(''); setMinScore(0); setStatus(null); setRegion(null); setLockedOnly(false); setPage(1); }}>{t.reset}</Button>
                 </Group>
