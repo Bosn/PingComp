@@ -112,6 +112,7 @@ export function App() {
   const [loading, setLoading] = useState(false);
   const [agentInput, setAgentInput] = useState('');
   const [agentLoading, setAgentLoading] = useState(false);
+  const [agentComposing, setAgentComposing] = useState(false);
   const [agentTurns, setAgentTurns] = useState<ChatTurn[]>([{ role: 'assistant', text: '我是 PingComp Agent。你可以自然语言问我潜在客户数据，例如："分数大于80且已锁定"。' }]);
   const [dash, setDash] = useState<DashboardPayload | null>(null);
   const [enrich, setEnrich] = useState<EnrichPayload | null>(null);
@@ -405,7 +406,17 @@ export function App() {
                     </Stack>
                   </ScrollArea>
                   <Group align="end">
-                    <TextInput style={{ flex: 1 }} placeholder={t.askPlaceholder} value={agentInput} onChange={(e) => setAgentInput(e.currentTarget.value)} onKeyDown={(e) => { if (e.key === 'Enter') askAgent(); }} />
+                    <TextInput
+                      style={{ flex: 1 }}
+                      placeholder={t.askPlaceholder}
+                      value={agentInput}
+                      onChange={(e) => setAgentInput(e.currentTarget.value)}
+                      onCompositionStart={() => setAgentComposing(true)}
+                      onCompositionEnd={() => setAgentComposing(false)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && !agentComposing && !(e.nativeEvent as any)?.isComposing) askAgent();
+                      }}
+                    />
                     <Button leftSection={<IconSend size={14} />} loading={agentLoading} onClick={askAgent}>{t.askAgent}</Button>
                   </Group>
                 </Stack>
