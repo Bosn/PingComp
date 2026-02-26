@@ -522,9 +522,9 @@ export function App() {
 
 
           <Tabs.Panel value="agent" pt="md">
-            <Box px="xs">
-              <Paper withBorder p="md" radius="md" style={{ borderColor: colorScheme === 'dark' ? 'rgba(120,140,180,0.35)' : undefined }}>
-                <Stack gap="sm">
+            <Box px="xs" style={{ minHeight: "calc(100vh - 210px)" }}>
+              <Paper withBorder p="md" radius="md" style={{ borderColor: colorScheme === 'dark' ? 'rgba(120,140,180,0.35)' : undefined, minHeight: "calc(100vh - 230px)", display: "flex", flexDirection: "column" }}>
+                <Stack gap="sm" style={{ flex: 1 }}>
                   <Group justify="space-between" wrap="wrap">
                     <Group>
                       <Text size="sm" c="dimmed">{t.sessions}</Text>
@@ -535,8 +535,8 @@ export function App() {
                       <Button size="xs" color="red" variant="light" onClick={deleteCurrentSession}>{t.deleteSession}</Button>
                     </Group>
                   </Group>
-                  <ScrollArea h={420}>
-                    <Stack gap="sm">
+                  <ScrollArea style={{ flex: 1 }} offsetScrollbars scrollbarSize={10}>
+                    <Stack gap="sm" pr="sm">
                       {agentTurns.map((t0, i) => (
                         <Paper key={i} p="sm" radius="md" withBorder style={{ alignSelf: t0.role === 'user' ? 'flex-end' : 'flex-start', maxWidth: '86%', background: t0.role === 'user' ? (colorScheme === 'dark' ? 'rgba(59,130,246,.22)' : 'rgba(59,130,246,.12)') : undefined }}>
                           <Text size="sm">{t0.text}</Text>
