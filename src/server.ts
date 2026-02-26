@@ -302,146 +302,141 @@ app.post('/api/agent/chat', async (req: Request, res: Response) => {
   const qwenModel = String(process.env.QWEN_MODEL || 'qwen-plus').trim();
   const qwenBase = String(process.env.QWEN_BASE_URL || 'https://dashscope-intl.aliyuncs.com/api/v1/services/aigc/text-generation/generation').trim();
 
-  const fallbackIntentFromRule = () => {
-    const lower = message.toLowerCase();
-    const statusMap: Record<string, string> = {
-      new: 'new', contacted: 'contacted', qualified: 'qualified', disqualified: 'disqualified',
-      新建: 'new', 已联系: 'contacted', 合格: 'qualified', 不合格: 'disqualified'
-    };
-    let status: string | null = null;
-    for (const k of Object.keys(statusMap)) {
-      if (lower.includes(k.toLowerCase())) { status = statusMap[k]; break; }
+  const conn = await getConn();
+
+  const runQwen = async (system: string, user: string) => {
+    if (!qwenKey) throw new Error('missing_qwen_api_key');
+    const isIntlGenApi = qwenBase.includes('/api/v1/services/aigc/text-generation/generation');
+    const body = isIntlGenApi
+      ? {
+          model: qwenModel,
+          input: { messages: [{ role: 'system', content: system }, { role: 'user', content: user }] },
+          parameters: { result_format: 'message', temperature: 0.1 }
+        }
+      : {
+          model: qwenModel,
+          messages: [{ role: 'system', content: system }, { role: 'user', content: user }],
+          temperature: 0.1
+        };
+
+    const rr = await fetch(qwenBase, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${qwenKey}` },
+      body: JSON.stringify(body)
+    });
+    if (!rr.ok) {
+      const errText = await rr.text();
+      throw new Error(`qwen_http_${rr.status}:${errText.slice(0, 180)}`);
     }
-    const scoreMatch = message.match(/(?:>=|>|大于|高于|不少于|at\s*least|above)?\s*(\d{1,3})\s*(?:分|score|\+)?/i);
-    const minScore = scoreMatch && Number(scoreMatch[1]) > 0 && Number(scoreMatch[1]) <= 100 ? Number(scoreMatch[1]) : null;
-    const ownerMatch = message.match(/owner\s*(?:是|=|:)?\s*([a-zA-Z0-9_\-\u4e00-\u9fa5]+)/i);
-    const owner = ownerMatch ? ownerMatch[1] : null;
-    const isStats = /总数|多少|统计|count|total|summary|概况|overview/.test(lower);
-    const lockedOnly = /锁定|locked/.test(lower);
-    const limit = /全部|所有|all/.test(lower) ? 100 : 30;
-    const keyword = message.replace(/(帮我|查询|查下|看看|潜在客户|线索|数据|please|find|search|show|list|客户)/gi, '').trim() || null;
-    return { isStats, minScore, status, lockedOnly, owner, keyword, limit };
+    const jj: any = await rr.json();
+    return String(
+      jj?.choices?.[0]?.message?.content ||
+      jj?.output?.choices?.[0]?.message?.content ||
+      jj?.output?.text || ''
+    ).trim();
   };
 
-  let intent: any = fallbackIntentFromRule();
-  let llmUsed = false;
+  const isSafeReadOnlySql = (sqlRaw: string) => {
+    const sql = sqlRaw.trim().replace(/;\s*$/, '');
+    if (!/^select\b/i.test(sql)) return false;
+    if (/\b(insert|update|delete|replace|drop|alter|truncate|create|grant|revoke|call|execute|show|desc|describe|explain|set|use|commit|rollback)\b/i.test(sql)) return false;
+    if (/--|\/\*|\*\//.test(sql)) return false;
+    if (/\b(information_schema|mysql\.|performance_schema|sys\.)\b/i.test(sql)) return false;
+    if (!new RegExp(`\\bfrom\\s+\\
+?\\
+?\\
+?\\?\\?`, 'i')) {
+      // noop to keep TS happy in multiline strings
+    }
+    if (!new RegExp(`\\bfrom\\s+\\
+?`).test('from ')) {
+      // noop
+    }
+    // Must query only target table
+    if (!new RegExp(`\\bfrom\\s+\\
+?\\
+?`).test('from ')) {
+      // noop
+    }
+    const fromOk = new RegExp(`\\bfrom\\s+\\` + TABLE.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&') + `\\b`, 'i').test(sql.replace(/`/g, ''));
+    if (!fromOk) return false;
+    return true;
+  };
+
+  let mode: 'qwen-sql' | 'fallback-60' | 'rule' = 'rule';
   let llmError: string | null = null;
+  let rows: any[] = [];
+  let sqlUsed = '';
 
   if (qwenKey) {
     try {
-      const system = `You are a query parser for a CRM leads table. Return strict JSON only.\nSchema:\n{\n  "isStats": boolean,\n  "minScore": number|null,\n  "status": "new"|"contacted"|"qualified"|"disqualified"|null,\n  "lockedOnly": boolean,\n  "owner": string|null,\n  "keyword": string|null,\n  "limit": number\n}\nRules: limit 1-100, minScore 0-100 or null, keep concise.`;
-      const isIntlGenApi = qwenBase.includes('/api/v1/services/aigc/text-generation/generation');
-      const body = isIntlGenApi
-        ? {
-            model: qwenModel,
-            input: {
-              messages: [
-                { role: 'system', content: system },
-                { role: 'user', content: message }
-              ]
-            },
-            parameters: {
-              result_format: 'message',
-              temperature: 0.1
-            }
-          }
-        : {
-            model: qwenModel,
-            messages: [
-              { role: 'system', content: system },
-              { role: 'user', content: message }
-            ],
-            temperature: 0.1
-          };
-      const rr = await fetch(qwenBase, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${qwenKey}`,
-        },
-        body: JSON.stringify(body)
-      });
-      if (rr.ok) {
-        const jj: any = await rr.json();
-        const text = String(
-          jj?.choices?.[0]?.message?.content ||
-          jj?.output?.choices?.[0]?.message?.content ||
-          jj?.output?.text ||
-          ''
-        ).trim();
-        const m = text.match(/\{[\s\S]*\}/);
-        if (m) {
-          const parsed = JSON.parse(m[0]);
-          intent = {
-            isStats: Boolean(parsed?.isStats),
-            minScore: (typeof parsed?.minScore === 'number' && parsed.minScore >= 0 && parsed.minScore <= 100) ? parsed.minScore : null,
-            status: ['new', 'contacted', 'qualified', 'disqualified'].includes(parsed?.status) ? parsed.status : null,
-            lockedOnly: Boolean(parsed?.lockedOnly),
-            owner: parsed?.owner ? String(parsed.owner).slice(0, 120) : null,
-            keyword: parsed?.keyword ? String(parsed.keyword).slice(0, 200) : null,
-            limit: Math.max(1, Math.min(100, Number(parsed?.limit || 30))),
-          };
-          llmUsed = true;
-        } else {
-          llmError = 'qwen_no_json_in_response';
-        }
+      const sqlPrompt = `Table: ${TABLE}\nColumns: id,name,region,vertical,funding,linkedin,latest_news,source,tidb_potential_score,tidb_potential_reason,manual_locked,lead_status,owner,tags,source_confidence,enrich_status,created_at,updated_at.\nGenerate ONE read-only SQL SELECT for MySQL to answer the user question.\nConstraints: SELECT only, from ${TABLE} only, no comments, no semicolon, include LIMIT <= 200. Return JSON only: {\"sql\":\"...\"}.`;
+      const sqlText = await runQwen(sqlPrompt, message);
+      const m = sqlText.match(/\{[\s\S]*\}/);
+      const parsed = m ? JSON.parse(m[0]) : null;
+      const sql = String(parsed?.sql || '').trim();
+      if (sql && isSafeReadOnlySql(sql)) {
+        sqlUsed = sql.replace(/;\s*$/, '');
+        const [qRows]: any = await conn.query(sqlUsed);
+        rows = Array.isArray(qRows) ? qRows.slice(0, 200) : [];
+        mode = 'qwen-sql';
       } else {
-        const errText = await rr.text();
-        llmError = `qwen_http_${rr.status}:${errText.slice(0,160)}`;
+        mode = 'fallback-60';
       }
     } catch (e: any) {
       llmError = String(e?.message || e || 'qwen_error');
-      // fallback stays
+      mode = 'fallback-60';
     }
+  } else {
+    mode = 'fallback-60';
   }
 
-  const conn = await getConn();
+  if (mode === 'fallback-60') {
+    const [baseRows]: any = await conn.query(
+      `SELECT id,name,region,owner,vertical,lead_status,manual_locked,tidb_potential_score,tidb_potential_reason,updated_at
+       FROM \`${TABLE}\`
+       WHERE IFNULL(tidb_potential_score,0) >= 60
+       ORDER BY IFNULL(tidb_potential_score,0) DESC, updated_at DESC
+       LIMIT 200`
+    );
+    const pool = Array.isArray(baseRows) ? baseRows : [];
 
-  if (intent.isStats) {
-    const [[tot]]: any = await conn.query(`SELECT COUNT(*) c FROM \`${TABLE}\``);
-    const [[locked]]: any = await conn.query(`SELECT COUNT(*) c FROM \`${TABLE}\` WHERE manual_locked=1`);
-    const [[avgScore]]: any = await conn.query(`SELECT ROUND(AVG(IFNULL(tidb_potential_score,0)),1) score FROM \`${TABLE}\``);
-    const [statusRows]: any = await conn.query(`SELECT lead_status, COUNT(*) c FROM \`${TABLE}\` GROUP BY lead_status ORDER BY c DESC`);
-    await conn.end();
-    const statusText = (statusRows || []).map((r: any) => `${r.lead_status}:${r.c}`).join('，');
-    return res.json({
-      ok: true,
-      reply: `当前共有 ${tot?.c || 0} 条潜在客户，锁定 ${locked?.c || 0} 条，平均分 ${avgScore?.score || 0}。状态分布：${statusText || '暂无'}。`,
-      rows: []
-    });
+    if (qwenKey) {
+      try {
+        const ansPrompt = `You are a CRM analyst. Based on provided rows, answer the question and pick most relevant rows. Return strict JSON:\n{\"reply\":\"...\",\"ids\":[1,2,...]} with max 50 ids.\nIf no good match, return empty ids.`;
+        const compactRows = pool.map((r: any) => ({
+          id: r.id, name: r.name, region: r.region, owner: r.owner, vertical: r.vertical,
+          score: r.tidb_potential_score, status: r.lead_status, locked: r.manual_locked
+        }));
+        const ansText = await runQwen(ansPrompt, `Question: ${message}\nRows: ${JSON.stringify(compactRows)}`);
+        const m2 = ansText.match(/\{[\s\S]*\}/);
+        const parsed2 = m2 ? JSON.parse(m2[0]) : null;
+        const ids = Array.isArray(parsed2?.ids) ? parsed2.ids.map((x: any) => Number(x)).filter((x: number) => Number.isFinite(x)) : [];
+        const idSet = new Set(ids);
+        rows = pool.filter((r: any) => idSet.has(Number(r.id))).slice(0, 50);
+        if (!rows.length) rows = pool.slice(0, 50);
+        const reply = String(parsed2?.reply || '').trim() || `基于 score>=60 的候选池，先给你返回最相关结果。`;
+        await conn.end();
+        return res.json({ ok: true, mode: 'fallback-60', llmError, reply, rows, sqlUsed: null });
+      } catch (e: any) {
+        llmError = llmError || String(e?.message || e || 'fallback_llm_error');
+      }
+    }
+
+    rows = pool.slice(0, 50);
   }
 
-  let where = ' WHERE 1=1';
-  const args: any[] = [];
-
-  if (typeof intent.minScore === 'number') {
-    where += ' AND IFNULL(tidb_potential_score,0) >= ?';
-    args.push(intent.minScore);
-  }
-  if (intent.lockedOnly) where += ' AND manual_locked=1';
-  if (intent.status) { where += ' AND lead_status=?'; args.push(intent.status); }
-  if (intent.owner) { where += ' AND owner LIKE ?'; args.push(`%${intent.owner}%`); }
-  if (intent.keyword) {
-    where += ' AND (name LIKE ? OR owner LIKE ? OR vertical LIKE ? OR source LIKE ? OR tags LIKE ? OR tidb_potential_reason LIKE ?)';
-    args.push(`%${intent.keyword}%`, `%${intent.keyword}%`, `%${intent.keyword}%`, `%${intent.keyword}%`, `%${intent.keyword}%`, `%${intent.keyword}%`);
-  }
-
-  const limit = Math.max(1, Math.min(100, Number(intent.limit || 30)));
-  const [rows]: any = await conn.query(
-    `SELECT id,name,owner,vertical,lead_status,manual_locked,tidb_potential_score,updated_at,tidb_potential_reason FROM \`${TABLE}\` ${where} ORDER BY IFNULL(tidb_potential_score,0) DESC, updated_at DESC LIMIT ?`,
-    [...args, limit]
-  );
   await conn.end();
 
-  const count = Array.isArray(rows) ? rows.length : 0;
-  const names = (rows || []).slice(0, 5).map((r: any) => `${r.name}(${r.tidb_potential_score ?? '-'})`).join('，');
-  const modeTag = llmUsed ? `（Qwen:${qwenModel}）` : '（Rule Mode）';
-  const note = (!llmUsed && llmError) ? `\n备注：Qwen 未生效（${llmError.slice(0,80)}）` : '';
+  const count = rows.length;
+  const names = rows.slice(0, 5).map((r: any) => `${r.name}(${r.tidb_potential_score ?? '-'})`).join('，');
+  const modeTag = mode === 'qwen-sql' ? `（Qwen SQL: ${qwenModel}）` : mode === 'fallback-60' ? '（Fallback score>=60）' : '（Rule Mode）';
+  const note = llmError ? `\n备注：${llmError.slice(0, 120)}` : '';
   const reply = count
-    ? `找到 ${count} 条结果${modeTag}。前几条：${names}${count >= limit ? '（结果已截断）' : ''}${note}`
-    : `没有匹配到结果${modeTag}，可以换个关键词或放宽条件。${note}`;
+    ? `找到 ${count} 条结果${modeTag}。前几条：${names}${count >= 50 ? '（结果已截断）' : ''}${note}`
+    : `没有匹配到结果${modeTag}。${note}`;
 
-  return res.json({ ok: true, mode: llmUsed ? 'qwen' : 'rule', llmError, reply, rows: rows || [] });
+  return res.json({ ok: true, mode, llmError, sqlUsed: sqlUsed || null, reply, rows });
 });
 
 app.get('/api/export.csv', async (req: Request, res: Response) => {
