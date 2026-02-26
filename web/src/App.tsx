@@ -31,13 +31,14 @@ type SavedView = {
   q: string;
   minScore: number;
   status: string | null;
+  region: string;
   lockedOnly: boolean;
 };
 
 const I18N = {
   zh: {
     title: 'PingComp', subtitle: '潜在客户人工清洗与标注', agent: 'Agent', dashboard: '仪表盘', leads: '线索管理', enrich: 'Enrich 队列',
-    filter: '筛选', reset: '重置', search: '搜索 name/owner/vertical/source/tags', minScore: '最低分', status: '状态', page: '页码',
+    filter: '筛选', reset: '重置', search: '搜索 name/owner/vertical/source/tags', minScore: '最低分', status: '状态', region: '国家/地区', page: '页码',
     lockOnly: '仅锁定', prev: '上一页', next: '下一页', edit: '编辑', saveLock: '保存并锁定', total: '总线索',
     locked: '人工锁定', avg: '平均分', lockRate: '锁定占比', exportCsv: '导出CSV', runBatch: '执行一轮(20条)',
     enqueue: '入队', noData: '暂无数据', trend7d: '近7天更新趋势', scoreDist: '评分分布', enrichDist: 'Enrich状态',
@@ -45,7 +46,7 @@ const I18N = {
   },
   en: {
     title: 'PingComp', subtitle: 'Lead ops workspace', agent: 'Agent', dashboard: 'Dashboard', leads: 'Leads', enrich: 'Enrich Queue',
-    filter: 'Filter', reset: 'Reset', search: 'Search name/owner/vertical/source/tags', minScore: 'Min score', status: 'Status',
+    filter: 'Filter', reset: 'Reset', search: 'Search name/owner/vertical/source/tags', minScore: 'Min score', status: 'Status', region: 'Country/Region',
     page: 'Page', lockOnly: 'Locked only', prev: 'Prev', next: 'Next', edit: 'Edit', saveLock: 'Save & lock', total: 'Total leads',
     locked: 'Manual locked', avg: 'Avg score', lockRate: 'Lock ratio', exportCsv: 'Export CSV', runBatch: 'Run batch (20)',
     enqueue: 'Enqueue', noData: 'No data', trend7d: '7-day update trend', scoreDist: 'Score distribution', enrichDist: 'Enrich status',
@@ -104,6 +105,7 @@ export function App() {
   const [q, setQ] = useState('');
   const [minScore, setMinScore] = useState<number>(0);
   const [status, setStatus] = useState<string | null>(null);
+  const [region, setRegion] = useState('');
   const [lockedOnly, setLockedOnly] = useState<boolean>(false);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
@@ -151,6 +153,7 @@ export function App() {
     if (q) params.set('q', q);
     if (minScore > 0) params.set('minScore', String(minScore));
     if (status) params.set('status', status);
+    if (region.trim()) params.set('region', region.trim());
     if (lockedOnly) params.set('locked', '1');
     const activePage = pageOverride ?? page;
     params.set('page', String(activePage));
@@ -177,7 +180,7 @@ export function App() {
       loadLeads(1);
     }, 320);
     return () => window.clearTimeout(h);
-  }, [q, minScore, status, lockedOnly, sortKey, sortDir, tab]);
+  }, [q, minScore, status, region, lockedOnly, sortKey, sortDir, tab]);
 
   useEffect(() => {
     if (tab !== 'leads') return;
@@ -233,13 +236,13 @@ export function App() {
 
   async function applyQuickView(kind: 'high' | 'locked' | 'followup' | 'all') {
     if (kind === 'high') {
-      setQ(''); setMinScore(80); setStatus('new'); setLockedOnly(false);
+      setQ(''); setMinScore(80); setStatus('new'); setRegion(''); setLockedOnly(false);
     } else if (kind === 'locked') {
-      setQ(''); setMinScore(0); setStatus(null); setLockedOnly(true);
+      setQ(''); setMinScore(0); setStatus(null); setRegion(''); setLockedOnly(true);
     } else if (kind === 'followup') {
-      setQ(''); setMinScore(0); setStatus('contacted'); setLockedOnly(false);
+      setQ(''); setMinScore(0); setStatus('contacted'); setRegion(''); setLockedOnly(false);
     } else {
-      setQ(''); setMinScore(0); setStatus(null); setLockedOnly(false);
+      setQ(''); setMinScore(0); setStatus(null); setRegion(''); setLockedOnly(false);
     }
     setPage(1);
   }
@@ -253,7 +256,7 @@ export function App() {
   function saveCurrentView() {
     const name = newViewName.trim();
     if (!name) return;
-    const view: SavedView = { name, q, minScore, status, lockedOnly };
+    const view: SavedView = { name, q, minScore, status, region, lockedOnly };
     const next = [view, ...savedViews.filter(v => v.name !== name)].slice(0, 12);
     persistViews(next);
     setSelectedSavedView(name);
@@ -264,7 +267,7 @@ export function App() {
     setSelectedSavedView(name);
     const v = savedViews.find(x => x.name === name);
     if (!v) return;
-    setQ(v.q); setMinScore(v.minScore); setStatus(v.status); setLockedOnly(v.lockedOnly);
+    setQ(v.q); setMinScore(v.minScore); setStatus(v.status); setRegion(v.region || ''); setLockedOnly(v.lockedOnly);
     setPage(1);
   }
 
@@ -461,8 +464,9 @@ export function App() {
                     <Slider value={minScore} onChange={setMinScore} min={0} max={100} step={1} />
                   </Box>
                   <Select w={170} placeholder={t.status} data={statusOptions} value={status} onChange={setStatus} clearable />
+                  <TextInput w={170} placeholder={t.region} value={region} onChange={(e) => setRegion(e.currentTarget.value)} />
                   <Select w={160} data={[{ value: '0', label: 'All' }, { value: '1', label: t.lockOnly }]} value={lockedOnly ? '1' : '0'} onChange={(v) => setLockedOnly(v === '1')} />
-                  <Button variant="default" onClick={() => { setQ(''); setMinScore(0); setStatus(null); setLockedOnly(false); setPage(1); }}>{t.reset}</Button>
+                  <Button variant="default" onClick={() => { setQ(''); setMinScore(0); setStatus(null); setRegion(''); setLockedOnly(false); setPage(1); }}>{t.reset}</Button>
                 </Group>
 
                 <Group mt="sm" mb={2} justify="space-between" wrap="wrap">

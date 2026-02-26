@@ -164,6 +164,7 @@ app.get('/api/leads', async (req: Request, res: Response) => {
   const q = String(req.query.q || '').trim();
   const min = Number(req.query.minScore || 0);
   const status = String(req.query.status || '').trim();
+  const region = String(req.query.region || '').trim();
   const onlyLocked = req.query.locked === '1';
   const sort = String(req.query.sort || 'score_desc').trim();
   const page = Math.max(1, Number(req.query.page || 1));
@@ -178,6 +179,7 @@ app.get('/api/leads', async (req: Request, res: Response) => {
   }
   if (min > 0) { where += ' AND IFNULL(tidb_potential_score,0) >= ?'; args.push(min); }
   if (status) { where += ' AND lead_status=?'; args.push(status); }
+  if (region) { where += ' AND region LIKE ?'; args.push(`%${region}%`); }
   if (onlyLocked) { where += ' AND manual_locked=1'; }
 
   const sortMap: Record<string, string> = {
