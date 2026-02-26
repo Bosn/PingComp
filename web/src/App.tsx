@@ -41,7 +41,7 @@ const I18N = {
     lockOnly: '仅锁定', prev: '上一页', next: '下一页', edit: '编辑', saveLock: '保存并锁定', total: '总线索',
     locked: '人工锁定', avg: '平均分', lockRate: '锁定占比', exportCsv: '导出CSV', runBatch: '执行一轮(20条)',
     enqueue: '入队', noData: '暂无数据', trend7d: '近7天更新趋势', scoreDist: '评分分布', enrichDist: 'Enrich状态',
-    bulkAction: '批量动作', apply: '执行', selected: '已选', quickViews: '快捷视图', savedViews: '已保存视图', saveView: '保存当前视图', deleteView: '删除视图', viewName: '视图名', account: '账户', logout: '退出', delete: '删除', deleteConfirm: '确认删除该线索？', deleteModalTitle: '确认删除', deleteModalDesc: '删除后不可恢复，请确认操作。', cancel: '取消', confirmDelete: '确认删除', askAgent: '问问 Agent', askPlaceholder: '例如：找出 owner 为 Bosn、分数大于80的客户',
+    bulkAction: '批量动作', apply: '执行', selected: '已选', quickViews: '快捷视图', savedViews: '已保存视图', saveView: '保存当前视图', deleteView: '删除视图', viewName: '视图名', account: '账户', logout: '退出', delete: '删除', deleteConfirm: '确认删除该线索？', deleteModalTitle: '确认删除', deleteModalDesc: '删除后不可恢复，请确认操作。', cancel: '取消', confirmDelete: '确认删除', askAgent: '问问 Agent', askPlaceholder: '例如：找出 owner 为某人、分数大于80的客户',
   },
   en: {
     title: 'PingComp', subtitle: 'Lead ops workspace', agent: 'Agent', dashboard: 'Dashboard', leads: 'Leads', enrich: 'Enrich Queue',
@@ -49,7 +49,7 @@ const I18N = {
     page: 'Page', lockOnly: 'Locked only', prev: 'Prev', next: 'Next', edit: 'Edit', saveLock: 'Save & lock', total: 'Total leads',
     locked: 'Manual locked', avg: 'Avg score', lockRate: 'Lock ratio', exportCsv: 'Export CSV', runBatch: 'Run batch (20)',
     enqueue: 'Enqueue', noData: 'No data', trend7d: '7-day update trend', scoreDist: 'Score distribution', enrichDist: 'Enrich status',
-    bulkAction: 'Bulk action', apply: 'Apply', selected: 'Selected', quickViews: 'Quick views', savedViews: 'Saved views', saveView: 'Save current view', deleteView: 'Delete view', viewName: 'View name', account: 'Account', logout: 'Logout', delete: 'Delete', deleteConfirm: 'Delete this lead?', deleteModalTitle: 'Confirm deletion', deleteModalDesc: 'This operation cannot be undone.', cancel: 'Cancel', confirmDelete: 'Delete', askAgent: 'Ask Agent', askPlaceholder: 'e.g. find leads owned by Bosn with score >= 80',
+    bulkAction: 'Bulk action', apply: 'Apply', selected: 'Selected', quickViews: 'Quick views', savedViews: 'Saved views', saveView: 'Save current view', deleteView: 'Delete view', viewName: 'View name', account: 'Account', logout: 'Logout', delete: 'Delete', deleteConfirm: 'Delete this lead?', deleteModalTitle: 'Confirm deletion', deleteModalDesc: 'This operation cannot be undone.', cancel: 'Cancel', confirmDelete: 'Delete', askAgent: 'Ask Agent', askPlaceholder: 'e.g. find leads with score >= 80 and a specific owner',
   },
 } as const;
 
