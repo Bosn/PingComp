@@ -297,8 +297,8 @@ app.post('/api/agent/chat', async (req: Request, res: Response) => {
   if (!message) return res.status(400).json({ ok: false, error: 'empty message' });
 
   const qwenKey = String(process.env.QWEN_API_KEY || '').trim();
-  const qwenModel = String(process.env.QWEN_MODEL || 'qwen3.5-plus').trim();
-  const qwenBase = String(process.env.QWEN_BASE_URL || 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions').trim();
+  const qwenModel = String(process.env.QWEN_MODEL || 'qwen-plus').trim();
+  const qwenBase = String(process.env.QWEN_BASE_URL || 'https://dashscope-intl.aliyuncs.com/api/v1/services/aigc/text-generation/generation').trim();
 
   const fallbackIntentFromRule = () => {
     const lower = message.toLowerCase();
@@ -328,14 +328,29 @@ app.post('/api/agent/chat', async (req: Request, res: Response) => {
   if (qwenKey) {
     try {
       const system = `You are a query parser for a CRM leads table. Return strict JSON only.\nSchema:\n{\n  "isStats": boolean,\n  "minScore": number|null,\n  "status": "new"|"contacted"|"qualified"|"disqualified"|null,\n  "lockedOnly": boolean,\n  "owner": string|null,\n  "keyword": string|null,\n  "limit": number\n}\nRules: limit 1-100, minScore 0-100 or null, keep concise.`;
-      const body = {
-        model: qwenModel,
-        messages: [
-          { role: 'system', content: system },
-          { role: 'user', content: message }
-        ],
-        temperature: 0.1
-      };
+      const isIntlGenApi = qwenBase.includes('/api/v1/services/aigc/text-generation/generation');
+      const body = isIntlGenApi
+        ? {
+            model: qwenModel,
+            input: {
+              messages: [
+                { role: 'system', content: system },
+                { role: 'user', content: message }
+              ]
+            },
+            parameters: {
+              result_format: 'message',
+              temperature: 0.1
+            }
+          }
+        : {
+            model: qwenModel,
+            messages: [
+              { role: 'system', content: system },
+              { role: 'user', content: message }
+            ],
+            temperature: 0.1
+          };
       const rr = await fetch(qwenBase, {
         method: 'POST',
         headers: {
@@ -346,7 +361,12 @@ app.post('/api/agent/chat', async (req: Request, res: Response) => {
       });
       if (rr.ok) {
         const jj: any = await rr.json();
-        const text = String(jj?.choices?.[0]?.message?.content || '').trim();
+        const text = String(
+          jj?.choices?.[0]?.message?.content ||
+          jj?.output?.choices?.[0]?.message?.content ||
+          jj?.output?.text ||
+          ''
+        ).trim();
         const m = text.match(/\{[\s\S]*\}/);
         if (m) {
           const parsed = JSON.parse(m[0]);
@@ -360,6 +380,8 @@ app.post('/api/agent/chat', async (req: Request, res: Response) => {
             limit: Math.max(1, Math.min(100, Number(parsed?.limit || 30))),
           };
           llmUsed = true;
+        } else {
+          llmError = 'qwen_no_json_in_response';
         }
       } else {
         const errText = await rr.text();
@@ -411,7 +433,7 @@ app.post('/api/agent/chat', async (req: Request, res: Response) => {
 
   const count = Array.isArray(rows) ? rows.length : 0;
   const names = (rows || []).slice(0, 5).map((r: any) => `${r.name}(${r.tidb_potential_score ?? '-'})`).join('，');
-  const modeTag = llmUsed ? '（Qwen3.5-Plus）' : '（Rule Mode）';
+  const modeTag = llmUsed ? `（Qwen:${qwenModel}）` : '（Rule Mode）';
   const note = (!llmUsed && llmError) ? `\n备注：Qwen 未生效（${llmError.slice(0,80)}）` : '';
   const reply = count
     ? `找到 ${count} 条结果${modeTag}。前几条：${names}${count >= limit ? '（结果已截断）' : ''}${note}`
