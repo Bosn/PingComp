@@ -291,15 +291,82 @@ app.delete('/api/leads/:id', async (req: Request, res: Response) => {
 });
 
 
+
 app.post('/api/agent/chat', async (req: Request, res: Response) => {
   const message = String(req.body?.message || '').trim();
   if (!message) return res.status(400).json({ ok: false, error: 'empty message' });
 
-  const conn = await getConn();
-  const lower = message.toLowerCase();
+  const qwenKey = String(process.env.QWEN_API_KEY || '').trim();
+  const qwenModel = String(process.env.QWEN_MODEL || 'qwen3.5-plus').trim();
+  const qwenBase = String(process.env.QWEN_BASE_URL || 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions').trim();
 
-  const isStats = /总数|多少|统计|count|total|summary|概况|overview/.test(lower);
-  if (isStats) {
+  const fallbackIntentFromRule = () => {
+    const lower = message.toLowerCase();
+    const statusMap: Record<string, string> = {
+      new: 'new', contacted: 'contacted', qualified: 'qualified', disqualified: 'disqualified',
+      新建: 'new', 已联系: 'contacted', 合格: 'qualified', 不合格: 'disqualified'
+    };
+    let status: string | null = null;
+    for (const k of Object.keys(statusMap)) {
+      if (lower.includes(k.toLowerCase())) { status = statusMap[k]; break; }
+    }
+    const scoreMatch = message.match(/(?:>=|>|大于|高于|不少于|at\s*least|above)?\s*(\d{1,3})\s*(?:分|score|\+)?/i);
+    const minScore = scoreMatch && Number(scoreMatch[1]) > 0 && Number(scoreMatch[1]) <= 100 ? Number(scoreMatch[1]) : null;
+    const ownerMatch = message.match(/owner\s*(?:是|=|:)?\s*([a-zA-Z0-9_\-\u4e00-\u9fa5]+)/i);
+    const owner = ownerMatch ? ownerMatch[1] : null;
+    const isStats = /总数|多少|统计|count|total|summary|概况|overview/.test(lower);
+    const lockedOnly = /锁定|locked/.test(lower);
+    const limit = /全部|所有|all/.test(lower) ? 100 : 30;
+    const keyword = message.replace(/(帮我|查询|查下|看看|潜在客户|线索|数据|please|find|search|show|list|客户)/gi, '').trim() || null;
+    return { isStats, minScore, status, lockedOnly, owner, keyword, limit };
+  };
+
+  let intent: any = fallbackIntentFromRule();
+
+  if (qwenKey) {
+    try {
+      const system = `You are a query parser for a CRM leads table. Return strict JSON only.\nSchema:\n{\n  "isStats": boolean,\n  "minScore": number|null,\n  "status": "new"|"contacted"|"qualified"|"disqualified"|null,\n  "lockedOnly": boolean,\n  "owner": string|null,\n  "keyword": string|null,\n  "limit": number\n}\nRules: limit 1-100, minScore 0-100 or null, keep concise.`;
+      const body = {
+        model: qwenModel,
+        messages: [
+          { role: 'system', content: system },
+          { role: 'user', content: message }
+        ],
+        temperature: 0.1
+      };
+      const rr = await fetch(qwenBase, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${qwenKey}`,
+        },
+        body: JSON.stringify(body)
+      });
+      if (rr.ok) {
+        const jj: any = await rr.json();
+        const text = String(jj?.choices?.[0]?.message?.content || '').trim();
+        const m = text.match(/\{[\s\S]*\}/);
+        if (m) {
+          const parsed = JSON.parse(m[0]);
+          intent = {
+            isStats: Boolean(parsed?.isStats),
+            minScore: (typeof parsed?.minScore === 'number' && parsed.minScore >= 0 && parsed.minScore <= 100) ? parsed.minScore : null,
+            status: ['new', 'contacted', 'qualified', 'disqualified'].includes(parsed?.status) ? parsed.status : null,
+            lockedOnly: Boolean(parsed?.lockedOnly),
+            owner: parsed?.owner ? String(parsed.owner).slice(0, 120) : null,
+            keyword: parsed?.keyword ? String(parsed.keyword).slice(0, 200) : null,
+            limit: Math.max(1, Math.min(100, Number(parsed?.limit || 30))),
+          };
+        }
+      }
+    } catch {
+      // fallback stays
+    }
+  }
+
+  const conn = await getConn();
+
+  if (intent.isStats) {
     const [[tot]]: any = await conn.query(`SELECT COUNT(*) c FROM \`${TABLE}\``);
     const [[locked]]: any = await conn.query(`SELECT COUNT(*) c FROM \`${TABLE}\` WHERE manual_locked=1`);
     const [[avgScore]]: any = await conn.query(`SELECT ROUND(AVG(IFNULL(tidb_potential_score,0)),1) score FROM \`${TABLE}\``);
@@ -316,36 +383,19 @@ app.post('/api/agent/chat', async (req: Request, res: Response) => {
   let where = ' WHERE 1=1';
   const args: any[] = [];
 
-  // score filter: >=80 / 大于80 / score 80+
-  const scoreMatch = message.match(/(?:>=|>|大于|高于|不少于|at least|above)?\s*(\d{1,3})\s*(?:分|score|\+)?/i);
-  if (scoreMatch && Number(scoreMatch[1]) > 0 && Number(scoreMatch[1]) <= 100) {
+  if (typeof intent.minScore === 'number') {
     where += ' AND IFNULL(tidb_potential_score,0) >= ?';
-    args.push(Number(scoreMatch[1]));
+    args.push(intent.minScore);
   }
-
-  if (/锁定|locked/.test(lower)) where += ' AND manual_locked=1';
-
-  const statusMap: Record<string, string> = {
-    new: 'new', contacted: 'contacted', qualified: 'qualified', disqualified: 'disqualified',
-    新建: 'new', 已联系: 'contacted', 合格: 'qualified', 不合格: 'disqualified'
-  };
-  for (const k of Object.keys(statusMap)) {
-    if (lower.includes(k.toLowerCase())) {
-      where += ' AND lead_status=?';
-      args.push(statusMap[k]);
-      break;
-    }
-  }
-
-  // keyword search
-  const kw = message.replace(/(帮我|查询|查下|看看|潜在客户|线索|数据|please|find|search|show|list|客户)/gi, '').trim();
-  if (kw) {
+  if (intent.lockedOnly) where += ' AND manual_locked=1';
+  if (intent.status) { where += ' AND lead_status=?'; args.push(intent.status); }
+  if (intent.owner) { where += ' AND owner LIKE ?'; args.push(`%${intent.owner}%`); }
+  if (intent.keyword) {
     where += ' AND (name LIKE ? OR owner LIKE ? OR vertical LIKE ? OR source LIKE ? OR tags LIKE ? OR tidb_potential_reason LIKE ?)';
-    args.push(`%${kw}%`, `%${kw}%`, `%${kw}%`, `%${kw}%`, `%${kw}%`, `%${kw}%`);
+    args.push(`%${intent.keyword}%`, `%${intent.keyword}%`, `%${intent.keyword}%`, `%${intent.keyword}%`, `%${intent.keyword}%`, `%${intent.keyword}%`);
   }
 
-
-  const limit = /全部|所有|all/.test(lower) ? 100 : 30;
+  const limit = Math.max(1, Math.min(100, Number(intent.limit || 30)));
   const [rows]: any = await conn.query(
     `SELECT id,name,owner,vertical,lead_status,manual_locked,tidb_potential_score,updated_at,tidb_potential_reason FROM \`${TABLE}\` ${where} ORDER BY IFNULL(tidb_potential_score,0) DESC, updated_at DESC LIMIT ?`,
     [...args, limit]
@@ -354,9 +404,10 @@ app.post('/api/agent/chat', async (req: Request, res: Response) => {
 
   const count = Array.isArray(rows) ? rows.length : 0;
   const names = (rows || []).slice(0, 5).map((r: any) => `${r.name}(${r.tidb_potential_score ?? '-'})`).join('，');
+  const llmTag = qwenKey ? '（Qwen3.5-Plus）' : '（Rule Mode）';
   const reply = count
-    ? `找到 ${count} 条结果。前几条：${names}${count >= limit ? '（结果已截断）' : ''}`
-    : '没有匹配到结果，可以换个关键词或放宽条件。';
+    ? `找到 ${count} 条结果${llmTag}。前几条：${names}${count >= limit ? '（结果已截断）' : ''}`
+    : `没有匹配到结果${llmTag}，可以换个关键词或放宽条件。`;
 
   return res.json({ ok: true, reply, rows: rows || [] });
 });
