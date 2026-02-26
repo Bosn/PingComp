@@ -464,8 +464,9 @@ export function App() {
   };
 
   const thStyle: any = {
-    background: colorScheme === 'dark' ? 'rgba(18,24,39,0.95)' : 'rgba(246,248,252,0.98)',
-    borderBottom: colorScheme === 'dark' ? '1px solid rgba(120,140,180,0.45)' : '1px solid #d7deea',
+    background: 'rgba(18,24,39,0.95)',
+    color: '#dbe7ff',
+    borderBottom: '1px solid rgba(120,140,180,0.45)',
   };
 
   const SortHead = ({ label, k, w }: { label: string; k: typeof sortKey; w?: number }) => (
