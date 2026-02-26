@@ -322,6 +322,8 @@ app.post('/api/agent/chat', async (req: Request, res: Response) => {
   };
 
   let intent: any = fallbackIntentFromRule();
+  let llmUsed = false;
+  let llmError: string | null = null;
 
   if (qwenKey) {
     try {
@@ -357,9 +359,14 @@ app.post('/api/agent/chat', async (req: Request, res: Response) => {
             keyword: parsed?.keyword ? String(parsed.keyword).slice(0, 200) : null,
             limit: Math.max(1, Math.min(100, Number(parsed?.limit || 30))),
           };
+          llmUsed = true;
         }
+      } else {
+        const errText = await rr.text();
+        llmError = `qwen_http_${rr.status}:${errText.slice(0,160)}`;
       }
-    } catch {
+    } catch (e: any) {
+      llmError = String(e?.message || e || 'qwen_error');
       // fallback stays
     }
   }
@@ -404,12 +411,13 @@ app.post('/api/agent/chat', async (req: Request, res: Response) => {
 
   const count = Array.isArray(rows) ? rows.length : 0;
   const names = (rows || []).slice(0, 5).map((r: any) => `${r.name}(${r.tidb_potential_score ?? '-'})`).join('，');
-  const llmTag = qwenKey ? '（Qwen3.5-Plus）' : '（Rule Mode）';
+  const modeTag = llmUsed ? '（Qwen3.5-Plus）' : '（Rule Mode）';
+  const note = (!llmUsed && llmError) ? `\n备注：Qwen 未生效（${llmError.slice(0,80)}）` : '';
   const reply = count
-    ? `找到 ${count} 条结果${llmTag}。前几条：${names}${count >= limit ? '（结果已截断）' : ''}`
-    : `没有匹配到结果${llmTag}，可以换个关键词或放宽条件。`;
+    ? `找到 ${count} 条结果${modeTag}。前几条：${names}${count >= limit ? '（结果已截断）' : ''}${note}`
+    : `没有匹配到结果${modeTag}，可以换个关键词或放宽条件。${note}`;
 
-  return res.json({ ok: true, reply, rows: rows || [] });
+  return res.json({ ok: true, mode: llmUsed ? 'qwen' : 'rule', llmError, reply, rows: rows || [] });
 });
 
 app.get('/api/export.csv', async (req: Request, res: Response) => {
