@@ -304,6 +304,51 @@ app.post('/api/agent/chat', async (req: Request, res: Response) => {
 
   const conn = await getConn();
 
+  // Dynamic chart intent (pie/line/bar): score distribution by 10-point buckets
+  if (/chart|图|饼图|pie|折线|line|柱状|bar/i.test(message)) {
+    const chartType = /pie|饼图/i.test(message)
+      ? 'pie'
+      : /line|折线/i.test(message)
+      ? 'line'
+      : 'bar';
+
+    const [bucketRows]: any = await conn.query(`
+      SELECT
+        CASE
+          WHEN IFNULL(tidb_potential_score,0) >= 100 THEN 100
+          ELSE FLOOR(IFNULL(tidb_potential_score,0)/10)*10
+        END AS b,
+        COUNT(*) AS c
+      FROM \`${TABLE}\`
+      GROUP BY b
+      ORDER BY b ASC
+    `);
+
+    const map = new Map<number, number>();
+    for (const r of (bucketRows || [])) map.set(Number(r.b || 0), Number(r.c || 0));
+    const labels: string[] = [];
+    const values: number[] = [];
+    for (let i = 0; i <= 90; i += 10) {
+      labels.push(i === 90 ? '90-100' : `${i}-${i + 9}`);
+      values.push(map.get(i) || 0);
+    }
+
+    await conn.end();
+    return res.json({
+      ok: true,
+      mode: 'chart',
+      reply: `已按 0-100 每10分分桶统计，共 ${values.reduce((a, b) => a + b, 0)} 家。`,
+      rows: [],
+      chart: {
+        type: chartType,
+        title: 'Potential Companies Score Distribution (10-point bins)',
+        labels,
+        values
+      }
+    });
+  }
+
+
   const runQwen = async (system: string, user: string) => {
     if (!qwenKey) throw new Error('missing_qwen_api_key');
     const isIntlGenApi = qwenBase.includes('/api/v1/services/aigc/text-generation/generation');

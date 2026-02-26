@@ -24,7 +24,9 @@ type DashboardPayload = {
 type EnrichJob = { id: number; lead_id: number; status: string; attempts: number; last_error?: string; updated_at?: string; name?: string; enrich_status?: string; };
 type EnrichPayload = { rows: EnrichJob[]; stats: { pending: number; running: number; done_count: number; failed: number } };
 
-type ChatTurn = { role: 'user' | 'assistant'; text: string; rows?: Lead[] };
+type ChartPayload = { type: 'pie' | 'line' | 'bar'; title?: string; labels: string[]; values: number[] };
+
+type ChatTurn = { role: 'user' | 'assistant'; text: string; rows?: Lead[]; chart?: ChartPayload };
 
 type SavedView = {
   name: string;
@@ -61,6 +63,64 @@ function useLocalLang() {
 }
 
 const scoreColor = (v: number) => (v >= 75 ? 'green' : v >= 50 ? 'yellow' : 'red');
+
+
+function PieMini({ labels, values }: { labels: string[]; values: number[] }) {
+  const total = Math.max(values.reduce((a, b) => a + b, 0), 1);
+  const colors = ['#4f8cff','#7c5cff','#22c55e','#f59e0b','#ef4444','#14b8a6','#a855f7','#64748b','#eab308','#10b981'];
+  let acc = 0;
+  const stops = values.map((v, i) => {
+    const start = (acc / total) * 100;
+    acc += v;
+    const end = (acc / total) * 100;
+    return `${colors[i % colors.length]} ${start}% ${end}%`;
+  }).join(', ');
+  return (
+    <Group align="flex-start" gap="md" wrap="wrap">
+      <Box w={150} h={150} style={{ borderRadius: '50%', background: `conic-gradient(${stops || '#334155 0 100%'})`, border: '1px solid rgba(148,163,184,.35)' }} />
+      <Stack gap={4}>
+        {labels.map((l, i) => (
+          <Group key={l + i} gap={6}><Box w={10} h={10} style={{ borderRadius: 2, background: colors[i % colors.length] }} /><Text size="xs">{l}: {values[i] ?? 0}</Text></Group>
+        ))}
+      </Stack>
+    </Group>
+  );
+}
+
+function LineMini({ labels, values }: { labels: string[]; values: number[] }) {
+  const w = 520, h = 170, p = 20;
+  const max = Math.max(...values, 1);
+  const sx = (i: number) => p + (i * (w - 2 * p)) / Math.max(values.length - 1, 1);
+  const sy = (v: number) => h - p - (v * (h - 2 * p)) / max;
+  const d = values.map((v, i) => `${i === 0 ? 'M' : 'L'} ${sx(i)} ${sy(v)}`).join(' ');
+  return (
+    <Box>
+      <svg viewBox={`0 0 ${w} ${h}`} width="100%" style={{ display: 'block' }}>
+        <path d={d} fill="none" stroke="#60a5fa" strokeWidth="2.5" />
+        {values.map((v, i) => <circle key={i} cx={sx(i)} cy={sy(v)} r="2.8" fill="#93c5fd" />)}
+      </svg>
+      <Group gap={8} wrap="wrap">
+        {labels.map((l, i) => <Text key={l + i} size="xs" c="dimmed">{l}:{values[i] ?? 0}</Text>)}
+      </Group>
+    </Box>
+  );
+}
+
+function BarMini({ labels, values }: { labels: string[]; values: number[] }) {
+  const max = Math.max(...values, 1);
+  return (
+    <Stack gap={6}>
+      {labels.map((l, i) => (
+        <Box key={l + i}>
+          <Group justify="space-between" mb={2}><Text size="xs">{l}</Text><Text size="xs" fw={600}>{values[i] ?? 0}</Text></Group>
+          <Box h={8} bg="dark.4" style={{ borderRadius: 999, overflow: 'hidden' }}>
+            <Box h="100%" w={`${Math.max(4, ((values[i] ?? 0) / max) * 100)}%`} bg="#60a5fa" style={{ borderRadius: 999 }} />
+          </Box>
+        </Box>
+      ))}
+    </Stack>
+  );
+}
 
 function TrendSparkline({ data }: { data: Array<{ d: string; c: number }> }) {
   if (!data?.length) return <Text size="sm" c="dimmed">-</Text>;
@@ -229,7 +289,7 @@ export function App() {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message: q })
       });
       const j = await r.json();
-      setAgentTurns(prev => [...prev, { role: 'assistant', text: j.reply || 'Done', rows: j.rows || [] }]);
+      setAgentTurns(prev => [...prev, { role: 'assistant', text: j.reply || 'Done', rows: j.rows || [], chart: j.chart || undefined }]);
     } catch (e: any) {
       setAgentTurns(prev => [...prev, { role: 'assistant', text: `请求失败：${e?.message || e}` }]);
     } finally {
@@ -418,6 +478,18 @@ export function App() {
                       {agentTurns.map((t0, i) => (
                         <Paper key={i} p="sm" radius="md" withBorder style={{ alignSelf: t0.role === 'user' ? 'flex-end' : 'flex-start', maxWidth: '86%', background: t0.role === 'user' ? (colorScheme === 'dark' ? 'rgba(59,130,246,.22)' : 'rgba(59,130,246,.12)') : undefined }}>
                           <Text size="sm">{t0.text}</Text>
+                          {t0.chart ? (
+                            <Paper mt="xs" p="sm" withBorder radius="sm">
+                              <Text size="xs" fw={700} mb={6}>{t0.chart.title || 'Chart'}</Text>
+                              {t0.chart.type === 'pie' ? (
+                                <PieMini labels={t0.chart.labels || []} values={t0.chart.values || []} />
+                              ) : t0.chart.type === 'line' ? (
+                                <LineMini labels={t0.chart.labels || []} values={t0.chart.values || []} />
+                              ) : (
+                                <BarMini labels={t0.chart.labels || []} values={t0.chart.values || []} />
+                              )}
+                            </Paper>
+                          ) : null}
                           {t0.rows && t0.rows.length > 0 ? (
                             <ScrollArea mt="xs">
                               <Table withTableBorder withColumnBorders verticalSpacing="xs" miw={760}>
