@@ -3,7 +3,7 @@ import {
   ActionIcon, AppShell, Avatar, Badge, Box, Button, Card, Checkbox, Divider, Group, Modal, NumberInput, Paper, ScrollArea, Select, Slider,
   SimpleGrid, Stack, Table, Tabs, Text, TextInput, Textarea, Title, Tooltip, useMantineColorScheme,
 } from '@mantine/core';
-import { IconActivity, IconArrowDown, IconArrowUp, IconBolt, IconBrain, IconEdit, IconFilter, IconGauge, IconLock, IconMoonStars, IconSun, IconTrash, IconWorld } from '@tabler/icons-react';
+import { IconActivity, IconArrowDown, IconArrowUp, IconBolt, IconBrain, IconEdit, IconFilter, IconGauge, IconLock, IconMessageCircle, IconMoonStars, IconSend, IconSun, IconTrash, IconWorld } from '@tabler/icons-react';
 
 type Lead = {
   id: number; name: string; region?: string; vertical: string; source: string;
@@ -24,6 +24,8 @@ type DashboardPayload = {
 type EnrichJob = { id: number; lead_id: number; status: string; attempts: number; last_error?: string; updated_at?: string; name?: string; enrich_status?: string; };
 type EnrichPayload = { rows: EnrichJob[]; stats: { pending: number; running: number; done_count: number; failed: number } };
 
+type ChatTurn = { role: 'user' | 'assistant'; text: string; rows?: Lead[] };
+
 type SavedView = {
   name: string;
   q: string;
@@ -34,20 +36,20 @@ type SavedView = {
 
 const I18N = {
   zh: {
-    title: 'PingComp', subtitle: '潜在客户人工清洗与标注', dashboard: '仪表盘', leads: '线索管理', enrich: 'Enrich 队列',
+    title: 'PingComp', subtitle: '潜在客户人工清洗与标注', agent: 'Agent', dashboard: '仪表盘', leads: '线索管理', enrich: 'Enrich 队列',
     filter: '筛选', reset: '重置', search: '搜索 name/owner/vertical/source/tags', minScore: '最低分', status: '状态', page: '页码',
     lockOnly: '仅锁定', prev: '上一页', next: '下一页', edit: '编辑', saveLock: '保存并锁定', total: '总线索',
     locked: '人工锁定', avg: '平均分', lockRate: '锁定占比', exportCsv: '导出CSV', runBatch: '执行一轮(20条)',
     enqueue: '入队', noData: '暂无数据', trend7d: '近7天更新趋势', scoreDist: '评分分布', enrichDist: 'Enrich状态',
-    bulkAction: '批量动作', apply: '执行', selected: '已选', quickViews: '快捷视图', savedViews: '已保存视图', saveView: '保存当前视图', deleteView: '删除视图', viewName: '视图名', account: '账户', logout: '退出', delete: '删除', deleteConfirm: '确认删除该线索？', deleteModalTitle: '确认删除', deleteModalDesc: '删除后不可恢复，请确认操作。', cancel: '取消', confirmDelete: '确认删除',
+    bulkAction: '批量动作', apply: '执行', selected: '已选', quickViews: '快捷视图', savedViews: '已保存视图', saveView: '保存当前视图', deleteView: '删除视图', viewName: '视图名', account: '账户', logout: '退出', delete: '删除', deleteConfirm: '确认删除该线索？', deleteModalTitle: '确认删除', deleteModalDesc: '删除后不可恢复，请确认操作。', cancel: '取消', confirmDelete: '确认删除', askAgent: '问问 Agent', askPlaceholder: '例如：找出 owner 为 Bosn、分数大于80的客户',
   },
   en: {
-    title: 'PingComp', subtitle: 'Lead ops workspace', dashboard: 'Dashboard', leads: 'Leads', enrich: 'Enrich Queue',
+    title: 'PingComp', subtitle: 'Lead ops workspace', agent: 'Agent', dashboard: 'Dashboard', leads: 'Leads', enrich: 'Enrich Queue',
     filter: 'Filter', reset: 'Reset', search: 'Search name/owner/vertical/source/tags', minScore: 'Min score', status: 'Status',
     page: 'Page', lockOnly: 'Locked only', prev: 'Prev', next: 'Next', edit: 'Edit', saveLock: 'Save & lock', total: 'Total leads',
     locked: 'Manual locked', avg: 'Avg score', lockRate: 'Lock ratio', exportCsv: 'Export CSV', runBatch: 'Run batch (20)',
     enqueue: 'Enqueue', noData: 'No data', trend7d: '7-day update trend', scoreDist: 'Score distribution', enrichDist: 'Enrich status',
-    bulkAction: 'Bulk action', apply: 'Apply', selected: 'Selected', quickViews: 'Quick views', savedViews: 'Saved views', saveView: 'Save current view', deleteView: 'Delete view', viewName: 'View name', account: 'Account', logout: 'Logout', delete: 'Delete', deleteConfirm: 'Delete this lead?', deleteModalTitle: 'Confirm deletion', deleteModalDesc: 'This operation cannot be undone.', cancel: 'Cancel', confirmDelete: 'Delete',
+    bulkAction: 'Bulk action', apply: 'Apply', selected: 'Selected', quickViews: 'Quick views', savedViews: 'Saved views', saveView: 'Save current view', deleteView: 'Delete view', viewName: 'View name', account: 'Account', logout: 'Logout', delete: 'Delete', deleteConfirm: 'Delete this lead?', deleteModalTitle: 'Confirm deletion', deleteModalDesc: 'This operation cannot be undone.', cancel: 'Cancel', confirmDelete: 'Delete', askAgent: 'Ask Agent', askPlaceholder: 'e.g. find leads owned by Bosn with score >= 80',
   },
 } as const;
 
@@ -97,7 +99,7 @@ export function App() {
   const { lang, setLang } = useLocalLang();
   const t = I18N[lang];
 
-  const [tab, setTab] = useState<string | null>('dashboard');
+  const [tab, setTab] = useState<string | null>('agent');
   const [rows, setRows] = useState<Lead[]>([]);
   const [q, setQ] = useState('');
   const [minScore, setMinScore] = useState<number>(0);
@@ -108,6 +110,9 @@ export function App() {
   const [totalRows, setTotalRows] = useState(0);
   const [selected, setSelected] = useState<Lead | null>(null);
   const [loading, setLoading] = useState(false);
+  const [agentInput, setAgentInput] = useState('');
+  const [agentLoading, setAgentLoading] = useState(false);
+  const [agentTurns, setAgentTurns] = useState<ChatTurn[]>([{ role: 'assistant', text: '我是 PingComp Agent。你可以自然语言问我潜在客户数据，例如："分数大于80且已锁定"。' }]);
   const [dash, setDash] = useState<DashboardPayload | null>(null);
   const [enrich, setEnrich] = useState<EnrichPayload | null>(null);
   const [enqueueIds, setEnqueueIds] = useState('');
@@ -181,6 +186,26 @@ export function App() {
   useEffect(() => {
     fetch('/api/auth/me').then(r => r.ok ? r.json() : null).then(j => setMe(j?.user || null)).catch(() => setMe(null));
   }, []);
+
+
+  async function askAgent() {
+    const q = agentInput.trim();
+    if (!q || agentLoading) return;
+    setAgentTurns(prev => [...prev, { role: 'user', text: q }]);
+    setAgentInput('');
+    setAgentLoading(true);
+    try {
+      const r = await fetch('/api/agent/chat', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message: q })
+      });
+      const j = await r.json();
+      setAgentTurns(prev => [...prev, { role: 'assistant', text: j.reply || 'Done', rows: j.rows || [] }]);
+    } catch (e: any) {
+      setAgentTurns(prev => [...prev, { role: 'assistant', text: `请求失败：${e?.message || e}` }]);
+    } finally {
+      setAgentLoading(false);
+    }
+  }
 
   async function saveLead() {
     if (!selected) return;
@@ -347,10 +372,46 @@ export function App() {
 
         <Tabs value={tab} onChange={setTab}>
           <Tabs.List>
+            <Tabs.Tab value="agent" leftSection={<IconMessageCircle size={14} />}>{t.agent}</Tabs.Tab>
             <Tabs.Tab value="dashboard" leftSection={<IconGauge size={14} />}>{t.dashboard}</Tabs.Tab>
             <Tabs.Tab value="leads" leftSection={<IconBrain size={14} />}>{t.leads}</Tabs.Tab>
             <Tabs.Tab value="enrich" leftSection={<IconBolt size={14} />}>{t.enrich}</Tabs.Tab>
           </Tabs.List>
+
+
+          <Tabs.Panel value="agent" pt="md">
+            <Box px="xs">
+              <Paper withBorder p="md" radius="md" style={{ borderColor: colorScheme === 'dark' ? 'rgba(120,140,180,0.35)' : undefined }}>
+                <Stack gap="sm">
+                  <ScrollArea h={420}>
+                    <Stack gap="sm">
+                      {agentTurns.map((t0, i) => (
+                        <Paper key={i} p="sm" radius="md" withBorder style={{ alignSelf: t0.role === 'user' ? 'flex-end' : 'flex-start', maxWidth: '86%', background: t0.role === 'user' ? (colorScheme === 'dark' ? 'rgba(59,130,246,.22)' : 'rgba(59,130,246,.12)') : undefined }}>
+                          <Text size="sm">{t0.text}</Text>
+                          {t0.rows && t0.rows.length > 0 ? (
+                            <ScrollArea mt="xs">
+                              <Table withTableBorder withColumnBorders verticalSpacing="xs" miw={760}>
+                                <Table.Thead><Table.Tr><Table.Th>ID</Table.Th><Table.Th>Name</Table.Th><Table.Th>Owner</Table.Th><Table.Th>Score</Table.Th><Table.Th>Status</Table.Th><Table.Th>Locked</Table.Th></Table.Tr></Table.Thead>
+                                <Table.Tbody>
+                                  {t0.rows.slice(0, 20).map(r => (
+                                    <Table.Tr key={r.id}><Table.Td>{r.id}</Table.Td><Table.Td>{r.name}</Table.Td><Table.Td>{r.owner || '-'}</Table.Td><Table.Td>{r.tidb_potential_score ?? '-'}</Table.Td><Table.Td>{r.lead_status}</Table.Td><Table.Td>{r.manual_locked ? 'Y' : '-'}</Table.Td></Table.Tr>
+                                  ))}
+                                </Table.Tbody>
+                              </Table>
+                            </ScrollArea>
+                          ) : null}
+                        </Paper>
+                      ))}
+                    </Stack>
+                  </ScrollArea>
+                  <Group align="end">
+                    <TextInput style={{ flex: 1 }} placeholder={t.askPlaceholder} value={agentInput} onChange={(e) => setAgentInput(e.currentTarget.value)} onKeyDown={(e) => { if (e.key === 'Enter') askAgent(); }} />
+                    <Button leftSection={<IconSend size={14} />} loading={agentLoading} onClick={askAgent}>{t.askAgent}</Button>
+                  </Group>
+                </Stack>
+              </Paper>
+            </Box>
+          </Tabs.Panel>
 
           <Tabs.Panel value="dashboard" pt="md">
             <Box px="xs">

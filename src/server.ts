@@ -290,6 +290,77 @@ app.delete('/api/leads/:id', async (req: Request, res: Response) => {
   return res.json({ ok: true, id });
 });
 
+
+app.post('/api/agent/chat', async (req: Request, res: Response) => {
+  const message = String(req.body?.message || '').trim();
+  if (!message) return res.status(400).json({ ok: false, error: 'empty message' });
+
+  const conn = await getConn();
+  const lower = message.toLowerCase();
+
+  const isStats = /总数|多少|统计|count|total|summary|概况|overview/.test(lower);
+  if (isStats) {
+    const [[tot]]: any = await conn.query(`SELECT COUNT(*) c FROM \`${TABLE}\``);
+    const [[locked]]: any = await conn.query(`SELECT COUNT(*) c FROM \`${TABLE}\` WHERE manual_locked=1`);
+    const [[avgScore]]: any = await conn.query(`SELECT ROUND(AVG(IFNULL(tidb_potential_score,0)),1) score FROM \`${TABLE}\``);
+    const [statusRows]: any = await conn.query(`SELECT lead_status, COUNT(*) c FROM \`${TABLE}\` GROUP BY lead_status ORDER BY c DESC`);
+    await conn.end();
+    const statusText = (statusRows || []).map((r: any) => `${r.lead_status}:${r.c}`).join('，');
+    return res.json({
+      ok: true,
+      reply: `当前共有 ${tot?.c || 0} 条潜在客户，锁定 ${locked?.c || 0} 条，平均分 ${avgScore?.score || 0}。状态分布：${statusText || '暂无'}。`,
+      rows: []
+    });
+  }
+
+  let where = ' WHERE 1=1';
+  const args: any[] = [];
+
+  // score filter: >=80 / 大于80 / score 80+
+  const scoreMatch = message.match(/(?:>=|>|大于|高于|不少于|at least|above)?\s*(\d{1,3})\s*(?:分|score|\+)?/i);
+  if (scoreMatch && Number(scoreMatch[1]) > 0 && Number(scoreMatch[1]) <= 100) {
+    where += ' AND IFNULL(tidb_potential_score,0) >= ?';
+    args.push(Number(scoreMatch[1]));
+  }
+
+  if (/锁定|locked/.test(lower)) where += ' AND manual_locked=1';
+
+  const statusMap: Record<string, string> = {
+    new: 'new', contacted: 'contacted', qualified: 'qualified', disqualified: 'disqualified',
+    新建: 'new', 已联系: 'contacted', 合格: 'qualified', 不合格: 'disqualified'
+  };
+  for (const k of Object.keys(statusMap)) {
+    if (lower.includes(k.toLowerCase())) {
+      where += ' AND lead_status=?';
+      args.push(statusMap[k]);
+      break;
+    }
+  }
+
+  // keyword search
+  const kw = message.replace(/(帮我|查询|查下|看看|潜在客户|线索|数据|please|find|search|show|list|客户)/gi, '').trim();
+  if (kw) {
+    where += ' AND (name LIKE ? OR owner LIKE ? OR vertical LIKE ? OR source LIKE ? OR tags LIKE ? OR tidb_potential_reason LIKE ?)';
+    args.push(`%${kw}%`, `%${kw}%`, `%${kw}%`, `%${kw}%`, `%${kw}%`, `%${kw}%`);
+  }
+
+
+  const limit = /全部|所有|all/.test(lower) ? 100 : 30;
+  const [rows]: any = await conn.query(
+    `SELECT id,name,owner,vertical,lead_status,manual_locked,tidb_potential_score,updated_at,tidb_potential_reason FROM \`${TABLE}\` ${where} ORDER BY IFNULL(tidb_potential_score,0) DESC, updated_at DESC LIMIT ?`,
+    [...args, limit]
+  );
+  await conn.end();
+
+  const count = Array.isArray(rows) ? rows.length : 0;
+  const names = (rows || []).slice(0, 5).map((r: any) => `${r.name}(${r.tidb_potential_score ?? '-'})`).join('，');
+  const reply = count
+    ? `找到 ${count} 条结果。前几条：${names}${count >= limit ? '（结果已截断）' : ''}`
+    : '没有匹配到结果，可以换个关键词或放宽条件。';
+
+  return res.json({ ok: true, reply, rows: rows || [] });
+});
+
 app.get('/api/export.csv', async (req: Request, res: Response) => {
   const conn = await getConn();
   const min = Number(req.query.minScore || 0);
