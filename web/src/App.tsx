@@ -424,7 +424,7 @@ export function App() {
                                 <Table.Thead><Table.Tr><Table.Th>ID</Table.Th><Table.Th>Name</Table.Th><Table.Th>Owner</Table.Th><Table.Th>Score</Table.Th><Table.Th>Status</Table.Th><Table.Th>Locked</Table.Th></Table.Tr></Table.Thead>
                                 <Table.Tbody>
                                   {t0.rows.slice(0, 20).map(r => (
-                                    <Table.Tr key={r.id}><Table.Td>{r.id}</Table.Td><Table.Td>{r.name}</Table.Td><Table.Td>{r.owner || '-'}</Table.Td><Table.Td>{r.tidb_potential_score ?? '-'}</Table.Td><Table.Td>{r.lead_status}</Table.Td><Table.Td>{r.manual_locked ? 'Y' : '-'}</Table.Td></Table.Tr>
+                                    <Table.Tr key={r.id}><Table.Td style={{ paddingTop: 6, paddingBottom: 6 }}>{r.id}</Table.Td><Table.Td>{r.name}</Table.Td><Table.Td style={{ paddingTop: 6, paddingBottom: 6 }}>{r.owner || '-'}</Table.Td><Table.Td>{r.tidb_potential_score ?? '-'}</Table.Td><Table.Td style={{ paddingTop: 6, paddingBottom: 6 }}>{r.lead_status}</Table.Td><Table.Td>{r.manual_locked ? 'Y' : '-'}</Table.Td></Table.Tr>
                                   ))}
                                 </Table.Tbody>
                               </Table>
@@ -498,20 +498,20 @@ export function App() {
                 <Divider my="sm" />
 
                 <ScrollArea>
-                  <Table striped highlightOnHover withTableBorder withColumnBorders miw={1560} verticalSpacing="sm" style={{ borderColor: colorScheme === 'dark' ? 'rgba(120,140,180,0.35)' : undefined }}>
+                  <Table striped highlightOnHover withTableBorder withColumnBorders miw={1660} verticalSpacing={2} style={{ borderColor: colorScheme === 'dark' ? 'rgba(120,140,180,0.35)' : undefined }} fontSize="sm">
                     <Table.Thead>
                       <Table.Tr>
                         <Table.Th w={46}><Checkbox checked={allChecked} onChange={(e) => {
                           const v = e.currentTarget.checked;
                           setSelectedIds(v ? new Set(sortedRows.map(r => r.id)) : new Set());
                         }} /></Table.Th>
-                        <SortHead label="ID" k="id" w={64} /><SortHead label="Name" k="name" /><SortHead label="Score" k="score" w={88} /><SortHead label="Status" k="lead_status" /><SortHead label="Owner" k="owner" />
+                        <SortHead label="ID" k="id" w={64} /><SortHead label="Name" k="name" /><Table.Th style={thStyle}>Source</Table.Th><SortHead label="Score" k="score" w={88} /><SortHead label="Status" k="lead_status" /><SortHead label="Owner" k="owner" />
                         <Table.Th w={56} style={thStyle}>Locked</Table.Th><SortHead label="Vertical" k="vertical" /><Table.Th style={thStyle}>Region</Table.Th><SortHead label="CreatedAt" k="created_at" w={122} /><SortHead label="UpdatedAt" k="updated_at" w={122} /><Table.Th w={96} style={thStyle}>Action</Table.Th><Table.Th style={{ ...thStyle, width: 420, minWidth: 420, maxWidth: 420 }}>Reason</Table.Th>
                       </Table.Tr>
                     </Table.Thead>
                     <Table.Tbody>
                       {rows.length === 0 ? (
-                        <Table.Tr><Table.Td colSpan={13}><Text c="dimmed" ta="center" py="md">{t.noData}</Text></Table.Td></Table.Tr>
+                        <Table.Tr><Table.Td colSpan={14}><Text c="dimmed" ta="center" py="md">{t.noData}</Text></Table.Td></Table.Tr>
                       ) : rows.map((r) => (
                         <Table.Tr key={r.id} style={recentEditedIds.has(r.id) ? { background: 'rgba(34,197,94,0.12)', transition: 'background 220ms ease' } : { transition: 'background 220ms ease' }}>
                           <Table.Td>
@@ -521,18 +521,19 @@ export function App() {
                               setSelectedIds(next);
                             }} />
                           </Table.Td>
-                          <Table.Td>{r.id}</Table.Td>
-                          <Table.Td><Text fw={600}>{r.name}</Text><Text size="xs" c="dimmed">{r.source}</Text></Table.Td>
-                          <Table.Td><Badge color={scoreColor(r.tidb_potential_score ?? 0)} style={{ minWidth: 36, justifyContent: 'center' }}>{r.tidb_potential_score ?? '-'}</Badge></Table.Td>
-                          <Table.Td>{r.lead_status}</Table.Td>
-                          <Table.Td>{r.owner || '-'}</Table.Td>
+                          <Table.Td style={{ paddingTop: 6, paddingBottom: 6 }}>{r.id}</Table.Td>
+                          <Table.Td style={{ paddingTop: 6, paddingBottom: 6 }}><Text fw={600} size="sm">{r.name}</Text></Table.Td>
+                          <Table.Td style={{ paddingTop: 6, paddingBottom: 6 }}><Text size="xs" c="dimmed" lineClamp={1}>{r.source || '-'}</Text></Table.Td>
+                          <Table.Td style={{ paddingTop: 6, paddingBottom: 6 }}><Badge color={scoreColor(r.tidb_potential_score ?? 0)} style={{ minWidth: 36, justifyContent: 'center' }}>{r.tidb_potential_score ?? '-'}</Badge></Table.Td>
+                          <Table.Td style={{ paddingTop: 6, paddingBottom: 6 }}>{r.lead_status}</Table.Td>
+                          <Table.Td style={{ paddingTop: 6, paddingBottom: 6 }}>{r.owner || '-'}</Table.Td>
                           <Table.Td>{r.manual_locked ? <Tooltip label="LOCKED" withArrow><ActionIcon variant="light" color="violet" size="sm"><IconLock size={13} /></ActionIcon></Tooltip> : '-'}</Table.Td>
-                          <Table.Td>{r.vertical}</Table.Td>
-                          <Table.Td>{r.region || '-'}</Table.Td>
-                          <Table.Td style={{ whiteSpace: 'nowrap' }}>{(r.created_at || '').slice(0, 10)}</Table.Td>
-                          <Table.Td style={{ whiteSpace: 'nowrap' }}>{(r.updated_at || '').slice(0, 10)}</Table.Td>
-                          <Table.Td><Group gap={6}><ActionIcon variant="light" color="blue" onClick={() => setSelected({ ...r })} title={t.edit}><IconEdit size={14} /></ActionIcon><ActionIcon variant="light" color="red" onClick={() => requestDeleteOne(r.id)} title={t.delete}><IconTrash size={14} /></ActionIcon></Group></Table.Td>
-                          <Table.Td style={{ width: 420, minWidth: 420, maxWidth: 420 }}>
+                          <Table.Td style={{ paddingTop: 6, paddingBottom: 6 }}>{r.vertical}</Table.Td>
+                          <Table.Td style={{ paddingTop: 6, paddingBottom: 6 }}>{r.region || '-'}</Table.Td>
+                          <Table.Td style={{ whiteSpace: 'nowrap', paddingTop: 6, paddingBottom: 6 }}>{(r.created_at || '').slice(0, 10)}</Table.Td>
+                          <Table.Td style={{ whiteSpace: 'nowrap', paddingTop: 6, paddingBottom: 6 }}>{(r.updated_at || '').slice(0, 10)}</Table.Td>
+                          <Table.Td style={{ paddingTop: 4, paddingBottom: 4 }}><Group gap={4}><ActionIcon variant="light" color="blue" size="sm" onClick={() => setSelected({ ...r })} title={t.edit}><IconEdit size={13} /></ActionIcon><ActionIcon variant="light" color="red" size="sm" onClick={() => requestDeleteOne(r.id)} title={t.delete}><IconTrash size={13} /></ActionIcon></Group></Table.Td>
+                          <Table.Td style={{ width: 420, minWidth: 420, maxWidth: 420, paddingTop: 6, paddingBottom: 6 }}>
                             <Tooltip multiline w={560} withArrow label={r.tidb_potential_reason || '-'}>
                               <Text size="sm" lineClamp={1}>{r.tidb_potential_reason || ''}</Text>
                             </Tooltip>
@@ -582,7 +583,7 @@ export function App() {
                     </Table.Thead>
                     <Table.Tbody>
                       {(enrich?.rows || []).map((r) => (
-                        <Table.Tr key={r.id} style={recentEditedIds.has(r.id) ? { background: 'rgba(34,197,94,0.12)', transition: 'background 220ms ease' } : { transition: 'background 220ms ease' }}><Table.Td>{r.id}</Table.Td><Table.Td>{r.lead_id}</Table.Td><Table.Td>{r.name || ''}</Table.Td><Table.Td>{r.status}</Table.Td><Table.Td>{r.attempts}</Table.Td><Table.Td>{r.updated_at || ''}</Table.Td></Table.Tr>
+                        <Table.Tr key={r.id} style={recentEditedIds.has(r.id) ? { background: 'rgba(34,197,94,0.12)', transition: 'background 220ms ease' } : { transition: 'background 220ms ease' }}><Table.Td style={{ paddingTop: 6, paddingBottom: 6 }}>{r.id}</Table.Td><Table.Td>{r.lead_id}</Table.Td><Table.Td>{r.name || ''}</Table.Td><Table.Td>{r.status}</Table.Td><Table.Td>{r.attempts}</Table.Td><Table.Td>{r.updated_at || ''}</Table.Td></Table.Tr>
                       ))}
                     </Table.Tbody>
                   </Table>
