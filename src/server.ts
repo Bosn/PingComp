@@ -2,6 +2,7 @@ import express, { type NextFunction, type Request, type Response } from 'express
 import dotenv from 'dotenv';
 import { auth } from 'express-openid-connect';
 import { getConn, migrate, TABLE } from './db.js';
+import { htmlToPlain } from './utils/htmlToPlain.js';
 
 dotenv.config();
 const app = express();
@@ -159,7 +160,215 @@ async function logActivity(conn: any, leadId: number, action: string, actor = 'p
   } catch {}
 }
 
+function getActor(req: Request): string {
+  const email = String((req as any).oidc?.user?.email || '').trim();
+  return email || 'pingcomp-react';
+}
+
 // -------- API --------
+
+// Interviews v1 (M2 scaffold + core create/update/read/delete)
+app.post('/api/interviews', async (req: Request, res: Response) => {
+  const b: any = req.body || {};
+  const leadId = Number(b.leadId);
+  const title = String(b.title || '').trim();
+  const interviewDate = String(b.interviewDate || '').trim();
+  const channel = String(b.channel || '').trim();
+  const transcriptHtml = String(b.transcriptHtml || '').trim();
+
+  if (!Number.isFinite(leadId) || leadId <= 0) return res.status(400).json({ ok: false, error: 'invalid leadId' });
+  if (!title) return res.status(400).json({ ok: false, error: 'missing title' });
+  if (!interviewDate) return res.status(400).json({ ok: false, error: 'missing interviewDate' });
+  if (!channel) return res.status(400).json({ ok: false, error: 'missing channel' });
+  if (!transcriptHtml) return res.status(400).json({ ok: false, error: 'missing transcriptHtml' });
+
+  const transcriptPlain = htmlToPlain(transcriptHtml);
+  const actor = getActor(req);
+
+  const conn = await getConn();
+  try {
+    const [r]: any = await conn.execute(
+      `INSERT INTO interviews (
+        lead_id, title, interview_date, channel, interviewer,
+        contact_name, contact_role, company,
+        summary, pain_points, current_solution, requirements, objections_risks, next_steps,
+        tags, transcript_html, transcript_plain,
+        created_by, updated_by
+      ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      [
+        leadId,
+        title,
+        interviewDate,
+        channel,
+        b.interviewer || null,
+        b.contactName || null,
+        b.contactRole || null,
+        b.company || null,
+        b.summary || null,
+        b.painPoints || null,
+        b.currentSolution || null,
+        b.requirements || null,
+        b.objectionsRisks || null,
+        b.nextSteps || null,
+        Array.isArray(b.tags) ? b.tags.join(',') : (b.tags || null),
+        transcriptHtml,
+        transcriptPlain,
+        actor,
+        actor
+      ]
+    );
+
+    const id = Number(r?.insertId || 0);
+    const [[row]]: any = await conn.query(`SELECT * FROM interviews WHERE id=? AND deleted_at IS NULL`, [id]);
+    return res.status(201).json({ ok: true, row });
+  } finally {
+    await conn.end();
+  }
+});
+
+app.get('/api/interviews/:id', async (req: Request, res: Response) => {
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id) || id <= 0) return res.status(400).json({ ok: false, error: 'invalid id' });
+  const conn = await getConn();
+  try {
+    const [[row]]: any = await conn.query(`SELECT * FROM interviews WHERE id=? AND deleted_at IS NULL`, [id]);
+    if (!row) return res.status(404).json({ ok: false, error: 'not found' });
+    return res.json({ ok: true, row });
+  } finally {
+    await conn.end();
+  }
+});
+
+app.put('/api/interviews/:id', async (req: Request, res: Response) => {
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id) || id <= 0) return res.status(400).json({ ok: false, error: 'invalid id' });
+
+  const b: any = req.body || {};
+  const actor = getActor(req);
+
+  const conn = await getConn();
+  try {
+    const [[before]]: any = await conn.query(`SELECT * FROM interviews WHERE id=? AND deleted_at IS NULL`, [id]);
+    if (!before) return res.status(404).json({ ok: false, error: 'not found' });
+
+    const transcriptHtml = b.transcriptHtml != null ? String(b.transcriptHtml || '') : null;
+    const transcriptPlain = transcriptHtml != null ? htmlToPlain(transcriptHtml) : null;
+
+    await conn.execute(
+      `UPDATE interviews SET
+        title=?, interview_date=?, channel=?, interviewer=?,
+        contact_name=?, contact_role=?, company=?,
+        summary=?, pain_points=?, current_solution=?, requirements=?, objections_risks=?, next_steps=?,
+        tags=?,
+        transcript_html=COALESCE(?, transcript_html),
+        transcript_plain=COALESCE(?, transcript_plain),
+        updated_at=NOW(), updated_by=?
+      WHERE id=? AND deleted_at IS NULL`,
+      [
+        String(b.title ?? before.title),
+        String(b.interviewDate ?? before.interview_date),
+        String(b.channel ?? before.channel),
+        b.interviewer ?? before.interviewer,
+        b.contactName ?? before.contact_name,
+        b.contactRole ?? before.contact_role,
+        b.company ?? before.company,
+        b.summary ?? before.summary,
+        b.painPoints ?? before.pain_points,
+        b.currentSolution ?? before.current_solution,
+        b.requirements ?? before.requirements,
+        b.objectionsRisks ?? before.objections_risks,
+        b.nextSteps ?? before.next_steps,
+        (Array.isArray(b.tags) ? b.tags.join(',') : (b.tags ?? before.tags)),
+        transcriptHtml,
+        transcriptPlain,
+        actor,
+        id
+      ]
+    );
+
+    const [[row]]: any = await conn.query(`SELECT * FROM interviews WHERE id=? AND deleted_at IS NULL`, [id]);
+    return res.json({ ok: true, row });
+  } finally {
+    await conn.end();
+  }
+});
+
+app.delete('/api/interviews/:id', async (req: Request, res: Response) => {
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id) || id <= 0) return res.status(400).json({ ok: false, error: 'invalid id' });
+  const actor = getActor(req);
+  const conn = await getConn();
+  try {
+    const [[row]]: any = await conn.query(`SELECT id FROM interviews WHERE id=? AND deleted_at IS NULL`, [id]);
+    if (!row) return res.status(404).json({ ok: false, error: 'not found' });
+    await conn.execute(`UPDATE interviews SET deleted_at=NOW(), updated_at=NOW(), updated_by=? WHERE id=? AND deleted_at IS NULL`, [actor, id]);
+    return res.json({ ok: true, id });
+  } finally {
+    await conn.end();
+  }
+});
+
+// List/search/filter (basic LIKE; tags OR)
+app.get('/api/interviews', async (req: Request, res: Response) => {
+  const leadId = String(req.query.leadId || '').trim();
+  const q = String(req.query.q || '').trim();
+  const channel = String(req.query.channel || '').trim();
+  const interviewer = String(req.query.interviewer || '').trim();
+  const tags = ([] as string[]).concat(req.query.tags as any || []).concat(req.query.tag as any || []).flat().map(String).map(s => s.trim()).filter(Boolean);
+  const limit = Math.min(100, Math.max(10, Number(req.query.limit || 20)));
+  const cursor = String(req.query.cursor || '').trim();
+
+  let cursorDate: string | null = null;
+  let cursorId: number | null = null;
+  if (cursor) {
+    const m = cursor.split('|');
+    if (m.length === 2) {
+      cursorDate = m[0];
+      cursorId = Number(m[1]);
+      if (!Number.isFinite(cursorId)) cursorId = null;
+    }
+  }
+
+  const conn = await getConn();
+  try {
+    let where = ' WHERE deleted_at IS NULL';
+    const args: any[] = [];
+
+    if (leadId) { where += ' AND lead_id=?'; args.push(Number(leadId)); }
+    if (channel) { where += ' AND channel=?'; args.push(channel); }
+    if (interviewer) { where += ' AND interviewer LIKE ?'; args.push(`%${interviewer}%`); }
+
+    if (q) {
+      where += ' AND (title LIKE ? OR company LIKE ? OR interviewer LIKE ? OR summary LIKE ? OR pain_points LIKE ? OR current_solution LIKE ? OR requirements LIKE ? OR objections_risks LIKE ? OR next_steps LIKE ? OR transcript_plain LIKE ? OR tags LIKE ?)';
+      for (let i = 0; i < 11; i++) args.push(`%${q}%`);
+    }
+
+    // tags OR: match any tag substring in the comma-separated tags field.
+    if (tags.length) {
+      where += ' AND (' + tags.map(() => 'tags LIKE ?').join(' OR ') + ')';
+      for (const t of tags) args.push(`%${t}%`);
+    }
+
+    if (cursorDate && cursorId) {
+      where += ' AND (interview_date < ? OR (interview_date = ? AND id < ?))';
+      args.push(cursorDate, cursorDate, cursorId);
+    }
+
+    const [rows]: any = await conn.query(
+      `SELECT id,lead_id,title,interview_date,channel,interviewer,company,summary,tags,updated_at
+       FROM interviews ${where}
+       ORDER BY interview_date DESC, id DESC
+       LIMIT ?`,
+      [...args, limit]
+    );
+
+    const nextCursor = rows?.length ? `${rows[rows.length - 1].interview_date}|${rows[rows.length - 1].id}` : null;
+    return res.json({ ok: true, rows: rows || [], nextCursor });
+  } finally {
+    await conn.end();
+  }
+});
+
 app.get('/api/leads', async (req: Request, res: Response) => {
   const q = String(req.query.q || '').trim();
   const min = Number(req.query.minScore || 0);
