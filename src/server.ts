@@ -320,6 +320,32 @@ function parseTagsQuery(q: any): string[] {
     .filter(Boolean);
 }
 
+function parseDateRange(q: any): { from: string | null; to: string | null } {
+  const preset = String(q?.datePreset || '').trim();
+  let from = String(q?.dateFrom || q?.from || '').trim();
+  let to = String(q?.dateTo || q?.to || '').trim();
+
+  // Presets (PRD): last7/30/90 (+ custom)
+  if (!from && !to && preset) {
+    const now = new Date();
+    const days = preset === 'last7' ? 7 : preset === 'last30' ? 30 : preset === 'last90' ? 90 : 0;
+    if (days > 0) {
+      const d = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
+      // Use YYYY-MM-DD in UTC
+      from = d.toISOString().slice(0, 10);
+      to = now.toISOString().slice(0, 10);
+    }
+  }
+
+  if (!from) from = '';
+  if (!to) to = '';
+
+  return {
+    from: from ? from : null,
+    to: to ? to : null,
+  };
+}
+
 function renderInterviewMarkdown(interview: any, leadName: string | null): string {
   const tags = String(interview?.tags || '').split(',').map((s: string) => s.trim()).filter(Boolean);
 
@@ -366,6 +392,7 @@ app.get('/api/interviews', async (req: Request, res: Response) => {
   const channel = String(req.query.channel || '').trim();
   const interviewer = String(req.query.interviewer || '').trim();
   const tags = parseTagsQuery(req.query);
+  const { from, to } = parseDateRange(req.query);
   const limit = Math.min(100, Math.max(10, Number(req.query.limit || 20)));
   const cursor = String(req.query.cursor || '').trim();
 
@@ -388,6 +415,8 @@ app.get('/api/interviews', async (req: Request, res: Response) => {
     if (leadId) { where += ' AND lead_id=?'; args.push(Number(leadId)); }
     if (channel) { where += ' AND channel=?'; args.push(channel); }
     if (interviewer) { where += ' AND interviewer LIKE ?'; args.push(`%${interviewer}%`); }
+    if (from) { where += ' AND interview_date >= ?'; args.push(from); }
+    if (to) { where += ' AND interview_date <= ?'; args.push(to); }
 
     if (q) {
       where += ' AND (title LIKE ? OR company LIKE ? OR interviewer LIKE ? OR summary LIKE ? OR pain_points LIKE ? OR current_solution LIKE ? OR requirements LIKE ? OR objections_risks LIKE ? OR next_steps LIKE ? OR transcript_plain LIKE ? OR tags LIKE ?)';
@@ -449,6 +478,7 @@ app.get('/interviews/export.md', ensureAuthForNonApi, async (req: Request, res: 
   const channel = String(req.query.channel || '').trim();
   const interviewer = String(req.query.interviewer || '').trim();
   const tags = parseTagsQuery(req.query);
+  const { from, to } = parseDateRange(req.query);
 
   const conn = await getConn();
   try {
@@ -458,6 +488,8 @@ app.get('/interviews/export.md', ensureAuthForNonApi, async (req: Request, res: 
     if (leadId) { where += ' AND lead_id=?'; args.push(Number(leadId)); }
     if (channel) { where += ' AND channel=?'; args.push(channel); }
     if (interviewer) { where += ' AND interviewer LIKE ?'; args.push(`%${interviewer}%`); }
+    if (from) { where += ' AND interview_date >= ?'; args.push(from); }
+    if (to) { where += ' AND interview_date <= ?'; args.push(to); }
 
     if (q) {
       where += ' AND (title LIKE ? OR company LIKE ? OR interviewer LIKE ? OR summary LIKE ? OR pain_points LIKE ? OR current_solution LIKE ? OR requirements LIKE ? OR objections_risks LIKE ? OR next_steps LIKE ? OR transcript_plain LIKE ? OR tags LIKE ?)';
