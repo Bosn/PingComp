@@ -70,6 +70,47 @@ export async function migrate() {
         KEY idx_lead_time (lead_id, created_at)
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
     `);
+
+    // Interviews v1 (Customer interview records)
+    await conn.query(`
+      CREATE TABLE IF NOT EXISTS interviews (
+        id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+        lead_id BIGINT UNSIGNED NOT NULL,
+        title VARCHAR(255) NOT NULL,
+        interview_date DATE NOT NULL,
+        channel VARCHAR(32) NOT NULL,
+        interviewer VARCHAR(128) NULL,
+
+        contact_name VARCHAR(255) NULL,
+        contact_role VARCHAR(255) NULL,
+        company VARCHAR(255) NULL,
+
+        summary TEXT NULL,
+        pain_points TEXT NULL,
+        current_solution TEXT NULL,
+        requirements TEXT NULL,
+        objections_risks TEXT NULL,
+        next_steps TEXT NULL,
+
+        tags VARCHAR(512) NULL,
+
+        transcript_html MEDIUMTEXT NULL,
+        transcript_plain MEDIUMTEXT NULL,
+
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        created_by VARCHAR(128) NULL,
+        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        updated_by VARCHAR(128) NULL,
+        deleted_at TIMESTAMP NULL DEFAULT NULL,
+
+        PRIMARY KEY (id),
+        KEY idx_lead_deleted_date_id (lead_id, deleted_at, interview_date DESC, id DESC),
+        KEY idx_deleted_date_id (deleted_at, interview_date DESC, id DESC),
+        KEY idx_deleted_updated_id (deleted_at, updated_at DESC, id DESC),
+        KEY idx_channel_deleted_date (channel, deleted_at, interview_date DESC, id DESC),
+        KEY idx_interviewer_deleted_date (interviewer, deleted_at, interview_date DESC, id DESC)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    `);
   } finally {
     await conn.end();
   }
