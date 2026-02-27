@@ -309,12 +309,63 @@ app.delete('/api/interviews/:id', async (req: Request, res: Response) => {
 });
 
 // List/search/filter (basic LIKE; tags OR)
+function parseTagsQuery(q: any): string[] {
+  // Supports ?tags=a&tags=b and/or ?tag=a
+  return ([] as any[])
+    .concat(q?.tags || [])
+    .concat(q?.tag || [])
+    .flat()
+    .map(String)
+    .map(s => s.trim())
+    .filter(Boolean);
+}
+
+function renderInterviewMarkdown(interview: any, leadName: string | null): string {
+  const tags = String(interview?.tags || '').split(',').map((s: string) => s.trim()).filter(Boolean);
+
+  const lines: string[] = [];
+  lines.push(`# ${interview?.title || ''}`);
+  lines.push('');
+  lines.push(`- Interview ID: ${interview?.id}`);
+  lines.push(`- Lead: ${(leadName || '-')} (${interview?.lead_id})`);
+  lines.push(`- Date: ${String(interview?.interview_date || '')}`);
+  lines.push(`- Channel: ${String(interview?.channel || '')}`);
+  lines.push(`- Interviewer: ${String(interview?.interviewer || '-')}`);
+  lines.push(`- Contact: ${String(interview?.contact_name || '-')}` + (interview?.contact_role ? ` / ${String(interview.contact_role)}` : ''));
+  lines.push(`- Company: ${String(interview?.company || '-')}`);
+  lines.push(`- Tags: ${tags.length ? tags.join(', ') : '-'}`);
+
+  const section = (title: string, body: any) => {
+    const v = String(body || '').trim();
+    if (!v) return;
+    lines.push('');
+    lines.push(`## ${title}`);
+    lines.push(v);
+  };
+
+  section('Summary', interview?.summary);
+  section('Pain Points', interview?.pain_points);
+  section('Current Solution', interview?.current_solution);
+  section('Requirements', interview?.requirements);
+  section('Objections / Risks', interview?.objections_risks);
+  section('Next Steps', interview?.next_steps);
+  section('Transcript (Plain)', interview?.transcript_plain);
+
+  lines.push('');
+  return lines.join('\n');
+}
+
+function ensureAuthForNonApi(req: Request, res: Response, next: NextFunction) {
+  // Reuse same rule as /api router to avoid exposing exports unauth.
+  return ensureAuth(req, res, next);
+}
+
 app.get('/api/interviews', async (req: Request, res: Response) => {
   const leadId = String(req.query.leadId || '').trim();
   const q = String(req.query.q || '').trim();
   const channel = String(req.query.channel || '').trim();
   const interviewer = String(req.query.interviewer || '').trim();
-  const tags = ([] as string[]).concat(req.query.tags as any || []).concat(req.query.tag as any || []).flat().map(String).map(s => s.trim()).filter(Boolean);
+  const tags = parseTagsQuery(req.query);
   const limit = Math.min(100, Math.max(10, Number(req.query.limit || 20)));
   const cursor = String(req.query.cursor || '').trim();
 
@@ -364,6 +415,112 @@ app.get('/api/interviews', async (req: Request, res: Response) => {
 
     const nextCursor = rows?.length ? `${rows[rows.length - 1].interview_date}|${rows[rows.length - 1].id}` : null;
     return res.json({ ok: true, rows: rows || [], nextCursor });
+  } finally {
+    await conn.end();
+  }
+});
+
+// Export endpoints (PRD paths, auth-protected)
+app.get('/interviews/:id/export.md', ensureAuthForNonApi, async (req: Request, res: Response) => {
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id) || id <= 0) return res.status(400).send('invalid id');
+
+  const conn = await getConn();
+  try {
+    const [[it]]: any = await conn.query(`SELECT * FROM interviews WHERE id=? AND deleted_at IS NULL`, [id]);
+    if (!it) return res.status(404).send('Not found');
+
+    const [[lead]]: any = await conn.query(`SELECT id,name FROM \`${TABLE}\` WHERE id=?`, [Number(it.lead_id)]);
+    const leadName = lead?.name || null;
+
+    const md = renderInterviewMarkdown(it, leadName);
+    res.status(200);
+    res.setHeader('Content-Type', 'text/markdown; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="interview_${id}.md"`);
+    return res.send(md);
+  } finally {
+    await conn.end();
+  }
+});
+
+app.get('/interviews/export.md', ensureAuthForNonApi, async (req: Request, res: Response) => {
+  const leadId = String(req.query.leadId || '').trim();
+  const q = String(req.query.q || '').trim();
+  const channel = String(req.query.channel || '').trim();
+  const interviewer = String(req.query.interviewer || '').trim();
+  const tags = parseTagsQuery(req.query);
+
+  const conn = await getConn();
+  try {
+    let where = ' WHERE deleted_at IS NULL';
+    const args: any[] = [];
+
+    if (leadId) { where += ' AND lead_id=?'; args.push(Number(leadId)); }
+    if (channel) { where += ' AND channel=?'; args.push(channel); }
+    if (interviewer) { where += ' AND interviewer LIKE ?'; args.push(`%${interviewer}%`); }
+
+    if (q) {
+      where += ' AND (title LIKE ? OR company LIKE ? OR interviewer LIKE ? OR summary LIKE ? OR pain_points LIKE ? OR current_solution LIKE ? OR requirements LIKE ? OR objections_risks LIKE ? OR next_steps LIKE ? OR transcript_plain LIKE ? OR tags LIKE ?)';
+      for (let i = 0; i < 11; i++) args.push(`%${q}%`);
+    }
+
+    if (tags.length) {
+      where += ' AND (' + tags.map(() => 'tags LIKE ?').join(' OR ') + ')';
+      for (const t of tags) args.push(`%${t}%`);
+    }
+
+    const [countRows]: any = await conn.query(`SELECT COUNT(*) c FROM interviews ${where}`, args);
+    const total = Number(countRows?.[0]?.c || 0);
+    if (total > 500) {
+      return res.status(400).json({ ok: false, error: { code: 'EXPORT_LIMIT_EXCEEDED', message: 'Export supports up to 500 interviews. Please narrow your filters.' }, total });
+    }
+
+    const [rows]: any = await conn.query(
+      `SELECT * FROM interviews ${where} ORDER BY interview_date DESC, id DESC`,
+      args
+    );
+
+    // Build leadId->name map to avoid per-row queries.
+    const leadIds = Array.from(new Set((rows || []).map((r: any) => Number(r.lead_id)).filter((n: any) => Number.isFinite(n))));
+    let leadMap = new Map<number, string>();
+    if (leadIds.length) {
+      const placeholders = leadIds.map(() => '?').join(',');
+      const [leadRows]: any = await conn.query(`SELECT id,name FROM \`${TABLE}\` WHERE id IN (${placeholders})`, leadIds);
+      for (const lr of (leadRows || [])) leadMap.set(Number(lr.id), String(lr.name || ''));
+    }
+
+    const headerLines: string[] = [];
+    headerLines.push('# Interviews Export');
+    headerLines.push('');
+    headerLines.push(`- Exported At: ${new Date().toISOString()}`);
+    headerLines.push(`- Query: ${q || '-'}`);
+    headerLines.push(`- LeadId: ${leadId || '-'}`);
+    headerLines.push(`- Channel: ${channel || '-'}`);
+    headerLines.push(`- Interviewer: ${interviewer || '-'}`);
+    headerLines.push(`- Tags: ${tags.length ? tags.join(', ') : '-'}`);
+    headerLines.push(`- Total: ${total}`);
+    headerLines.push('');
+    headerLines.push('---');
+    headerLines.push('');
+
+    const blocks: string[] = [];
+    let i = 0;
+    for (const it of (rows || [])) {
+      i++;
+      const leadName = leadMap.get(Number(it.lead_id)) || null;
+      blocks.push(`## ${i}. ${it.title || ''}`);
+      blocks.push('');
+      blocks.push(renderInterviewMarkdown(it, leadName).replace(/^# /, '')); // strip top-level header
+      blocks.push('---');
+      blocks.push('');
+    }
+
+    const md = headerLines.join('\n') + blocks.join('\n');
+
+    res.status(200);
+    res.setHeader('Content-Type', 'text/markdown; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="interviews_export_${new Date().toISOString().slice(0, 10).replaceAll('-', '')}.md"`);
+    return res.send(md);
   } finally {
     await conn.end();
   }
