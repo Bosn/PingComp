@@ -3,7 +3,7 @@ import {
   ActionIcon, Anchor, AppShell, Avatar, Badge, Box, Button, Card, Checkbox, Divider, Group, Modal, NumberInput, Paper, ScrollArea, Select, Slider,
   SimpleGrid, Stack, Table, Tabs, Text, TextInput, Textarea, Title, Tooltip, useMantineColorScheme,
 } from '@mantine/core';
-import { IconActivity, IconArrowDown, IconArrowUp, IconBolt, IconBrain, IconEdit, IconFilter, IconGauge, IconLock, IconMessageCircle, IconMoonStars, IconSend, IconSun, IconTrash, IconWorld } from '@tabler/icons-react';
+import { IconActivity, IconArrowDown, IconArrowUp, IconBolt, IconBrain, IconEdit, IconFilter, IconGauge, IconLock, IconMessageCircle, IconMoonStars, IconSend, IconSun, IconTrash, IconWorld, IconNotes, IconDownload } from '@tabler/icons-react';
 
 type Lead = {
   id: number; name: string; region?: string; vertical: string; source: string;
@@ -22,6 +22,28 @@ type DashboardPayload = {
 };
 
 type EnrichJob = { id: number; lead_id: number; status: string; attempts: number; last_error?: string; updated_at?: string; name?: string; enrich_status?: string; };
+
+type Interview = {
+  id: number;
+  lead_id: number;
+  title: string;
+  interview_date: string;
+  channel: string;
+  interviewer?: string | null;
+  company?: string | null;
+  contact_name?: string | null;
+  contact_role?: string | null;
+  summary?: string | null;
+  pain_points?: string | null;
+  current_solution?: string | null;
+  requirements?: string | null;
+  objections_risks?: string | null;
+  next_steps?: string | null;
+  tags?: string | null;
+  transcript_html?: string | null;
+  transcript_plain?: string | null;
+  updated_at?: string;
+};
 type EnrichPayload = { rows: EnrichJob[]; stats: { pending: number; running: number; done_count: number; failed: number } };
 
 type ChartPayload = { type: 'pie' | 'line' | 'bar'; title?: string; labels: string[]; values: number[] };
@@ -40,7 +62,7 @@ type SavedView = {
 
 const I18N = {
   zh: {
-    title: 'PingComp', subtitle: '潜在客户人工清洗与标注', agent: 'Agent', dashboard: '仪表盘', leads: '线索管理', enrich: 'Enrich 队列',
+    title: 'PingComp', subtitle: '潜在客户人工清洗与标注', agent: 'Agent', dashboard: '仪表盘', leads: '线索管理', interviews: '访谈记录', enrich: 'Enrich 队列',
     filter: '筛选', reset: '重置', search: '搜索 name/owner/vertical/source/tags', minScore: '最低分', status: '状态', region: '国家/地区', creator: 'Creator', page: '页码', pageSize: '每页条数',
     lockOnly: '仅锁定', prev: '上一页', next: '下一页', edit: '编辑', saveLock: '保存并锁定', total: '总线索',
     locked: '人工锁定', avg: '平均分', lockRate: '锁定占比', exportCsv: '导出CSV', runBatch: '执行一轮(20条)',
@@ -48,7 +70,7 @@ const I18N = {
     bulkAction: '批量动作', apply: '执行', selected: '已选', quickViews: '快捷视图', savedViews: '已保存视图', saveView: '保存当前视图', deleteView: '删除视图', viewName: '视图名', account: '账户', logout: '退出', delete: '删除', deleteConfirm: '确认删除该线索？', deleteModalTitle: '确认删除', deleteModalDesc: '删除后不可恢复，请确认操作。', cancel: '取消', confirmDelete: '确认删除', askAgent: '问问 Agent', askPlaceholder: '例如：找出 owner 为某人、分数大于80的客户', sessions: '会话', newSession: '新建会话', deleteSession: '删除会话', sessionName: '会话名称',
   },
   en: {
-    title: 'PingComp', subtitle: 'Lead ops workspace', agent: 'Agent', dashboard: 'Dashboard', leads: 'Leads', enrich: 'Enrich Queue',
+    title: 'PingComp', subtitle: 'Lead ops workspace', agent: 'Agent', dashboard: 'Dashboard', leads: 'Leads', interviews: 'Interviews', enrich: 'Enrich Queue',
     filter: 'Filter', reset: 'Reset', search: 'Search name/owner/vertical/source/tags', minScore: 'Min score', status: 'Status', region: 'Country/Region', creator: 'Creator', pageSize: 'Page size',
     page: 'Page', lockOnly: 'Locked only', prev: 'Prev', next: 'Next', edit: 'Edit', saveLock: 'Save & lock', total: 'Total leads',
     locked: 'Manual locked', avg: 'Avg score', lockRate: 'Lock ratio', exportCsv: 'Export CSV', runBatch: 'Run batch (20)',
@@ -214,6 +236,27 @@ export function App() {
   const [sortDir, setSortDir] = useState<'asc'|'desc'>('desc');
   const [deleteCtx, setDeleteCtx] = useState<{ ids: number[]; mode: 'single' | 'bulk' } | null>(null);
 
+  // Interviews
+  const [interviewsTabQ, setInterviewsTabQ] = useState('');
+  const [interviewsTabLeadId, setInterviewsTabLeadId] = useState<string>('');
+  const [interviewsTabChannel, setInterviewsTabChannel] = useState<string>('');
+  const [interviewsTabInterviewer, setInterviewsTabInterviewer] = useState<string>('');
+  const [interviewsTabTags, setInterviewsTabTags] = useState<string>('');
+  const [interviewsTabDatePreset, setInterviewsTabDatePreset] = useState<string>('last30');
+  const [interviewsTabDateFrom, setInterviewsTabDateFrom] = useState<string>('');
+  const [interviewsTabDateTo, setInterviewsTabDateTo] = useState<string>('');
+  const [interviewsRows, setInterviewsRows] = useState<Interview[]>([]);
+  const [interviewsCursor, setInterviewsCursor] = useState<string | null>(null);
+  const [interviewsLoading, setInterviewsLoading] = useState(false);
+
+  const [leadInterviewsCtx, setLeadInterviewsCtx] = useState<{ lead: Lead } | null>(null);
+  const [leadInterviewsRows, setLeadInterviewsRows] = useState<Interview[]>([]);
+  const [leadInterviewsCursor, setLeadInterviewsCursor] = useState<string | null>(null);
+  const [leadInterviewsLoading, setLeadInterviewsLoading] = useState(false);
+
+  const [editInterviewCtx, setEditInterviewCtx] = useState<{ mode: 'create' | 'edit'; leadId: number; row?: Interview } | null>(null);
+  const [editInterviewDraft, setEditInterviewDraft] = useState<any>(null);
+
   const statusOptions = useMemo(() => [
     { value: 'new', label: 'new' }, { value: 'contacted', label: 'contacted' },
     { value: 'qualified', label: 'qualified' }, { value: 'disqualified', label: 'disqualified' },
@@ -253,6 +296,54 @@ export function App() {
   async function loadDashboard() { const r = await fetch('/api/dashboard'); setDash(await r.json()); }
   async function loadEnrich() { const r = await fetch('/api/enrich/queue'); setEnrich(await r.json()); }
 
+  async function loadInterviews(opts?: { reset?: boolean }) {
+    if (interviewsLoading) return;
+    setInterviewsLoading(true);
+    try {
+      const params = new URLSearchParams();
+      if (interviewsTabQ.trim()) params.set('q', interviewsTabQ.trim());
+      if (interviewsTabLeadId.trim()) params.set('leadId', interviewsTabLeadId.trim());
+      if (interviewsTabChannel.trim()) params.set('channel', interviewsTabChannel.trim());
+      if (interviewsTabInterviewer.trim()) params.set('interviewer', interviewsTabInterviewer.trim());
+      if (interviewsTabTags.trim()) {
+        const parts = interviewsTabTags.split(',').map(s => s.trim()).filter(Boolean);
+        for (const p of parts) params.append('tags', p);
+      }
+      if (interviewsTabDatePreset) params.set('datePreset', interviewsTabDatePreset);
+      if (interviewsTabDateFrom.trim()) params.set('dateFrom', interviewsTabDateFrom.trim());
+      if (interviewsTabDateTo.trim()) params.set('dateTo', interviewsTabDateTo.trim());
+      params.set('limit', '50');
+      if (!opts?.reset && interviewsCursor) params.set('cursor', interviewsCursor);
+
+      const r = await fetch(`/api/interviews?${params.toString()}`);
+      const j = await r.json();
+      const next = (j.rows || []) as Interview[];
+      setInterviewsRows(opts?.reset ? next : [...interviewsRows, ...next]);
+      setInterviewsCursor(j.nextCursor || null);
+    } finally {
+      setInterviewsLoading(false);
+    }
+  }
+
+  async function loadLeadInterviews(opts?: { reset?: boolean }) {
+    if (!leadInterviewsCtx) return;
+    if (leadInterviewsLoading) return;
+    setLeadInterviewsLoading(true);
+    try {
+      const params = new URLSearchParams();
+      params.set('leadId', String(leadInterviewsCtx.lead.id));
+      params.set('limit', '50');
+      if (!opts?.reset && leadInterviewsCursor) params.set('cursor', leadInterviewsCursor);
+      const r = await fetch(`/api/interviews?${params.toString()}`);
+      const j = await r.json();
+      const next = (j.rows || []) as Interview[];
+      setLeadInterviewsRows(opts?.reset ? next : [...leadInterviewsRows, ...next]);
+      setLeadInterviewsCursor(j.nextCursor || null);
+    } finally {
+      setLeadInterviewsLoading(false);
+    }
+  }
+
   async function loadRegions(q = '') {
     setRegionLoading(true);
     try {
@@ -264,7 +355,12 @@ export function App() {
     }
   }
 
-  useEffect(() => { if (tab === 'dashboard') loadDashboard(); if (tab === 'enrich') loadEnrich(); if (tab === 'leads') { loadLeads(); loadRegions(''); } }, [tab]);
+  useEffect(() => {
+    if (tab === 'dashboard') loadDashboard();
+    if (tab === 'enrich') loadEnrich();
+    if (tab === 'leads') { loadLeads(); loadRegions(''); }
+    if (tab === 'interviews') { setInterviewsCursor(null); loadInterviews({ reset: true }); }
+  }, [tab]);
 
   useEffect(() => {
     if (tab !== 'leads') return;
@@ -517,6 +613,7 @@ export function App() {
           <Tabs.List>
             <Tabs.Tab value="agent" leftSection={<IconMessageCircle size={14} />}>{t.agent}</Tabs.Tab>
             <Tabs.Tab value="leads" leftSection={<IconBrain size={14} />}>{t.leads}</Tabs.Tab>
+            <Tabs.Tab value="interviews" leftSection={<IconNotes size={14} />}>{t.interviews}</Tabs.Tab>
             <Tabs.Tab value="enrich" leftSection={<IconBolt size={14} />}>{t.enrich}</Tabs.Tab>
             <Tabs.Tab value="dashboard" leftSection={<IconGauge size={14} />}>{t.dashboard}</Tabs.Tab>
           </Tabs.List>
@@ -675,7 +772,18 @@ export function App() {
                           <Table.Td style={{ paddingTop: 6, paddingBottom: 6 }}>{r.region || '-'}</Table.Td>
                           <Table.Td style={{ whiteSpace: 'nowrap', paddingTop: 6, paddingBottom: 6 }}>{(r.created_at || '').slice(0, 10)}</Table.Td>
                           <Table.Td style={{ whiteSpace: 'nowrap', paddingTop: 6, paddingBottom: 6 }}>{(r.updated_at || '').slice(0, 10)}</Table.Td>
-                          <Table.Td style={{ paddingTop: 4, paddingBottom: 4 }}><Group gap={4}><ActionIcon variant="light" color="blue" size="sm" onClick={() => setSelected({ ...r })} title={t.edit}><IconEdit size={13} /></ActionIcon><ActionIcon variant="light" color="red" size="sm" onClick={() => requestDeleteOne(r.id)} title={t.delete}><IconTrash size={13} /></ActionIcon></Group></Table.Td>
+                          <Table.Td style={{ paddingTop: 4, paddingBottom: 4 }}>
+                            <Group gap={4}>
+                              <ActionIcon variant="light" color="blue" size="sm" onClick={() => setSelected({ ...r })} title={t.edit}><IconEdit size={13} /></ActionIcon>
+                              <ActionIcon variant="light" color="grape" size="sm" onClick={() => {
+                                setLeadInterviewsCtx({ lead: { ...r } });
+                                setLeadInterviewsRows([]);
+                                setLeadInterviewsCursor(null);
+                                window.setTimeout(() => loadLeadInterviews({ reset: true }), 0);
+                              }} title="Interviews"><IconNotes size={13} /></ActionIcon>
+                              <ActionIcon variant="light" color="red" size="sm" onClick={() => requestDeleteOne(r.id)} title={t.delete}><IconTrash size={13} /></ActionIcon>
+                            </Group>
+                          </Table.Td>
                           <Table.Td style={{ width: 420, minWidth: 420, maxWidth: 420, paddingTop: 6, paddingBottom: 6 }}>
                             <Tooltip multiline w={560} withArrow label={r.tidb_potential_reason || '-'}>
                               <Text size="sm" lineClamp={1}>{r.tidb_potential_reason || ''}</Text>
@@ -697,6 +805,100 @@ export function App() {
                     <Button variant="default" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>{t.prev}</Button>
                     <Button variant="default" disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)}>{t.next}</Button>
                   </Group>
+                </Group>
+              </Paper>
+            </Box>
+          </Tabs.Panel>
+
+          <Tabs.Panel value="interviews" pt="md">
+            <Box px="xs">
+              <Paper withBorder p="md" radius="md" style={{ borderColor: colorScheme === 'dark' ? 'rgba(120,140,180,0.35)' : undefined }}>
+                <Group wrap="wrap" align="end">
+                  <TextInput w={240} label="LeadId" placeholder="(optional)" value={interviewsTabLeadId} onChange={(e) => setInterviewsTabLeadId(e.currentTarget.value)} />
+                  <TextInput w={260} label="Search" placeholder="q (title/summary/transcript)" value={interviewsTabQ} onChange={(e) => setInterviewsTabQ(e.currentTarget.value)} />
+                  <TextInput w={150} label="Channel" placeholder="meeting/wechat/..." value={interviewsTabChannel} onChange={(e) => setInterviewsTabChannel(e.currentTarget.value)} />
+                  <TextInput w={160} label="Interviewer" placeholder="(optional)" value={interviewsTabInterviewer} onChange={(e) => setInterviewsTabInterviewer(e.currentTarget.value)} />
+                  <TextInput w={220} label="Tags (comma)" placeholder="pricing,security" value={interviewsTabTags} onChange={(e) => setInterviewsTabTags(e.currentTarget.value)} />
+                  <Select w={150} label="Date preset" data={[{value:'last7',label:'last7'},{value:'last30',label:'last30'},{value:'last90',label:'last90'}]} value={interviewsTabDatePreset} onChange={(v) => setInterviewsTabDatePreset(v || 'last30')} />
+                  <TextInput w={140} label="From" placeholder="YYYY-MM-DD" value={interviewsTabDateFrom} onChange={(e) => setInterviewsTabDateFrom(e.currentTarget.value)} />
+                  <TextInput w={140} label="To" placeholder="YYYY-MM-DD" value={interviewsTabDateTo} onChange={(e) => setInterviewsTabDateTo(e.currentTarget.value)} />
+                  <Button variant="default" leftSection={<IconFilter size={14} />} onClick={() => { setInterviewsRows([]); setInterviewsCursor(null); loadInterviews({ reset: true }); }}>Apply</Button>
+                  <Button variant="light" leftSection={<IconDownload size={14} />} onClick={() => {
+                    const p = new URLSearchParams();
+                    if (interviewsTabLeadId.trim()) p.set('leadId', interviewsTabLeadId.trim());
+                    if (interviewsTabQ.trim()) p.set('q', interviewsTabQ.trim());
+                    if (interviewsTabChannel.trim()) p.set('channel', interviewsTabChannel.trim());
+                    if (interviewsTabInterviewer.trim()) p.set('interviewer', interviewsTabInterviewer.trim());
+                    if (interviewsTabTags.trim()) interviewsTabTags.split(',').map(s => s.trim()).filter(Boolean).forEach(x => p.append('tags', x));
+                    if (interviewsTabDatePreset) p.set('datePreset', interviewsTabDatePreset);
+                    if (interviewsTabDateFrom.trim()) p.set('dateFrom', interviewsTabDateFrom.trim());
+                    if (interviewsTabDateTo.trim()) p.set('dateTo', interviewsTabDateTo.trim());
+                    window.open(`/interviews/export.md?${p.toString()}`, '_blank');
+                  }}>Export md</Button>
+                </Group>
+
+                <Divider my="sm" />
+
+                <ScrollArea>
+                  <Table striped highlightOnHover withTableBorder withColumnBorders miw={1200}>
+                    <Table.Thead>
+                      <Table.Tr>
+                        <Table.Th>ID</Table.Th>
+                        <Table.Th>LeadId</Table.Th>
+                        <Table.Th>Title</Table.Th>
+                        <Table.Th>Date</Table.Th>
+                        <Table.Th>Channel</Table.Th>
+                        <Table.Th>Interviewer</Table.Th>
+                        <Table.Th>Tags</Table.Th>
+                        <Table.Th>Action</Table.Th>
+                      </Table.Tr>
+                    </Table.Thead>
+                    <Table.Tbody>
+                      {interviewsRows.length === 0 ? (
+                        <Table.Tr><Table.Td colSpan={8}><Text c="dimmed" ta="center" py="md">{interviewsLoading ? 'loading…' : t.noData}</Text></Table.Td></Table.Tr>
+                      ) : interviewsRows.map((it) => (
+                        <Table.Tr key={it.id}>
+                          <Table.Td>{it.id}</Table.Td>
+                          <Table.Td>{it.lead_id}</Table.Td>
+                          <Table.Td style={{ maxWidth: 360 }}><Tooltip withArrow label={it.title}><Text fw={600} lineClamp={1}>{it.title}</Text></Tooltip></Table.Td>
+                          <Table.Td>{(it.interview_date || '').slice(0,10)}</Table.Td>
+                          <Table.Td>{it.channel}</Table.Td>
+                          <Table.Td>{it.interviewer || '-'}</Table.Td>
+                          <Table.Td style={{ maxWidth: 220 }}><Text size="xs" c="dimmed" lineClamp={1}>{it.tags || '-'}</Text></Table.Td>
+                          <Table.Td>
+                            <Group gap={6}>
+                              <ActionIcon variant="light" color="blue" onClick={() => {
+                                setEditInterviewCtx({ mode: 'edit', leadId: it.lead_id, row: it });
+                                setEditInterviewDraft({
+                                  title: it.title,
+                                  interviewDate: it.interview_date,
+                                  channel: it.channel,
+                                  interviewer: it.interviewer || '',
+                                  company: it.company || '',
+                                  contactName: it.contact_name || '',
+                                  contactRole: it.contact_role || '',
+                                  tags: (it.tags || ''),
+                                  summary: it.summary || '',
+                                  painPoints: it.pain_points || '',
+                                  currentSolution: it.current_solution || '',
+                                  requirements: it.requirements || '',
+                                  objectionsRisks: it.objections_risks || '',
+                                  nextSteps: it.next_steps || '',
+                                  transcriptHtml: it.transcript_html || '',
+                                });
+                              }}><IconEdit size={14} /></ActionIcon>
+                              <ActionIcon variant="light" onClick={() => window.open(`/interviews/${it.id}/export.md`, '_blank')}><IconDownload size={14} /></ActionIcon>
+                            </Group>
+                          </Table.Td>
+                        </Table.Tr>
+                      ))}
+                    </Table.Tbody>
+                  </Table>
+                </ScrollArea>
+
+                <Group mt="sm" justify="space-between">
+                  <Text size="xs" c="dimmed">cursor: {interviewsCursor || '-'}</Text>
+                  <Button variant="default" disabled={!interviewsCursor || interviewsLoading} onClick={() => loadInterviews({ reset: false })}>Load more</Button>
                 </Group>
               </Paper>
             </Box>
@@ -798,6 +1000,185 @@ export function App() {
             <Button color="red" onClick={confirmDelete}>{t.confirmDelete}</Button>
           </Group>
         </Stack>
+      </Modal>
+
+      <Modal
+        opened={!!leadInterviewsCtx}
+        onClose={() => { setLeadInterviewsCtx(null); setLeadInterviewsRows([]); setLeadInterviewsCursor(null); }}
+        title={leadInterviewsCtx ? `Lead Interviews · ${leadInterviewsCtx.lead.name} (#${leadInterviewsCtx.lead.id})` : 'Lead Interviews'}
+        size="xl"
+      >
+        {leadInterviewsCtx ? (
+          <Stack>
+            <Group justify="space-between" wrap="wrap">
+              <Group gap={8}>
+                <Button leftSection={<IconNotes size={14} />} onClick={() => {
+                  setEditInterviewCtx({ mode: 'create', leadId: leadInterviewsCtx.lead.id });
+                  setEditInterviewDraft({
+                    title: `${leadInterviewsCtx.lead.name} - ${new Date().toISOString().slice(0, 10)}`,
+                    interviewDate: new Date().toISOString().slice(0, 10),
+                    channel: 'meeting',
+                    interviewer: '',
+                    company: leadInterviewsCtx.lead.name,
+                    contactName: '',
+                    contactRole: '',
+                    tags: '',
+                    summary: '',
+                    painPoints: '',
+                    currentSolution: '',
+                    requirements: '',
+                    objectionsRisks: '',
+                    nextSteps: '',
+                    transcriptHtml: '<p></p>'
+                  });
+                }}>New Interview</Button>
+                <Button variant="light" leftSection={<IconDownload size={14} />} onClick={() => window.open(`/interviews/export.md?leadId=${leadInterviewsCtx.lead.id}`, '_blank')}>Export lead md</Button>
+              </Group>
+              <Button variant="default" disabled={leadInterviewsLoading} onClick={() => { setLeadInterviewsRows([]); setLeadInterviewsCursor(null); loadLeadInterviews({ reset: true }); }}>Refresh</Button>
+            </Group>
+
+            <ScrollArea>
+              <Table withTableBorder withColumnBorders striped highlightOnHover miw={1100}>
+                <Table.Thead>
+                  <Table.Tr><Table.Th>ID</Table.Th><Table.Th>Title</Table.Th><Table.Th>Date</Table.Th><Table.Th>Channel</Table.Th><Table.Th>Interviewer</Table.Th><Table.Th>Tags</Table.Th><Table.Th>Action</Table.Th></Table.Tr>
+                </Table.Thead>
+                <Table.Tbody>
+                  {leadInterviewsRows.length === 0 ? (
+                    <Table.Tr><Table.Td colSpan={7}><Text c="dimmed" ta="center" py="md">{leadInterviewsLoading ? 'loading…' : t.noData}</Text></Table.Td></Table.Tr>
+                  ) : leadInterviewsRows.map((it) => (
+                    <Table.Tr key={it.id}>
+                      <Table.Td>{it.id}</Table.Td>
+                      <Table.Td style={{ maxWidth: 420 }}><Tooltip withArrow label={it.title}><Text fw={600} lineClamp={1}>{it.title}</Text></Tooltip></Table.Td>
+                      <Table.Td>{(it.interview_date || '').slice(0,10)}</Table.Td>
+                      <Table.Td>{it.channel}</Table.Td>
+                      <Table.Td>{it.interviewer || '-'}</Table.Td>
+                      <Table.Td><Text size="xs" c="dimmed" lineClamp={1}>{it.tags || '-'}</Text></Table.Td>
+                      <Table.Td>
+                        <Group gap={6}>
+                          <ActionIcon variant="light" color="blue" onClick={() => {
+                            setEditInterviewCtx({ mode: 'edit', leadId: it.lead_id, row: it });
+                            setEditInterviewDraft({
+                              title: it.title,
+                              interviewDate: it.interview_date,
+                              channel: it.channel,
+                              interviewer: it.interviewer || '',
+                              company: it.company || '',
+                              contactName: it.contact_name || '',
+                              contactRole: it.contact_role || '',
+                              tags: (it.tags || ''),
+                              summary: it.summary || '',
+                              painPoints: it.pain_points || '',
+                              currentSolution: it.current_solution || '',
+                              requirements: it.requirements || '',
+                              objectionsRisks: it.objections_risks || '',
+                              nextSteps: it.next_steps || '',
+                              transcriptHtml: it.transcript_html || '',
+                            });
+                          }}><IconEdit size={14} /></ActionIcon>
+                          <ActionIcon variant="light" onClick={() => window.open(`/interviews/${it.id}/export.md`, '_blank')}><IconDownload size={14} /></ActionIcon>
+                          <ActionIcon variant="light" color="red" onClick={async () => {
+                            const ok = window.confirm('Soft delete this interview?');
+                            if (!ok) return;
+                            await fetch(`/api/interviews/${it.id}`, { method: 'DELETE' });
+                            setLeadInterviewsRows([]); setLeadInterviewsCursor(null);
+                            await loadLeadInterviews({ reset: true });
+                          }}><IconTrash size={14} /></ActionIcon>
+                        </Group>
+                      </Table.Td>
+                    </Table.Tr>
+                  ))}
+                </Table.Tbody>
+              </Table>
+            </ScrollArea>
+
+            <Group justify="space-between" mt="sm">
+              <Text size="xs" c="dimmed">cursor: {leadInterviewsCursor || '-'}</Text>
+              <Button variant="default" disabled={!leadInterviewsCursor || leadInterviewsLoading} onClick={() => loadLeadInterviews({ reset: false })}>Load more</Button>
+            </Group>
+          </Stack>
+        ) : null}
+      </Modal>
+
+      <Modal
+        opened={!!editInterviewCtx}
+        onClose={() => { setEditInterviewCtx(null); setEditInterviewDraft(null); }}
+        title={editInterviewCtx?.mode === 'create' ? `New Interview (Lead #${editInterviewCtx.leadId})` : `Edit Interview #${editInterviewCtx?.row?.id || ''}`}
+        size="xl"
+      >
+        {editInterviewCtx && editInterviewDraft ? (
+          <Stack>
+            <Group grow>
+              <TextInput label="Title" value={editInterviewDraft.title || ''} onChange={(e) => setEditInterviewDraft({ ...editInterviewDraft, title: e.currentTarget.value })} />
+              <TextInput label="Interview Date" placeholder="YYYY-MM-DD" value={editInterviewDraft.interviewDate || ''} onChange={(e) => setEditInterviewDraft({ ...editInterviewDraft, interviewDate: e.currentTarget.value })} />
+              <TextInput label="Channel" value={editInterviewDraft.channel || ''} onChange={(e) => setEditInterviewDraft({ ...editInterviewDraft, channel: e.currentTarget.value })} />
+            </Group>
+            <Group grow>
+              <TextInput label="Interviewer" value={editInterviewDraft.interviewer || ''} onChange={(e) => setEditInterviewDraft({ ...editInterviewDraft, interviewer: e.currentTarget.value })} />
+              <TextInput label="Company" value={editInterviewDraft.company || ''} onChange={(e) => setEditInterviewDraft({ ...editInterviewDraft, company: e.currentTarget.value })} />
+              <TextInput label="Tags (comma)" value={editInterviewDraft.tags || ''} onChange={(e) => setEditInterviewDraft({ ...editInterviewDraft, tags: e.currentTarget.value })} />
+            </Group>
+            <Group grow>
+              <TextInput label="Contact Name" value={editInterviewDraft.contactName || ''} onChange={(e) => setEditInterviewDraft({ ...editInterviewDraft, contactName: e.currentTarget.value })} />
+              <TextInput label="Contact Role" value={editInterviewDraft.contactRole || ''} onChange={(e) => setEditInterviewDraft({ ...editInterviewDraft, contactRole: e.currentTarget.value })} />
+            </Group>
+
+            <SimpleGrid cols={{ base: 1, md: 2 }}>
+              <Textarea label="Summary" minRows={4} value={editInterviewDraft.summary || ''} onChange={(e) => setEditInterviewDraft({ ...editInterviewDraft, summary: e.currentTarget.value })} />
+              <Textarea label="Pain Points" minRows={4} value={editInterviewDraft.painPoints || ''} onChange={(e) => setEditInterviewDraft({ ...editInterviewDraft, painPoints: e.currentTarget.value })} />
+              <Textarea label="Current Solution" minRows={4} value={editInterviewDraft.currentSolution || ''} onChange={(e) => setEditInterviewDraft({ ...editInterviewDraft, currentSolution: e.currentTarget.value })} />
+              <Textarea label="Requirements" minRows={4} value={editInterviewDraft.requirements || ''} onChange={(e) => setEditInterviewDraft({ ...editInterviewDraft, requirements: e.currentTarget.value })} />
+              <Textarea label="Objections / Risks" minRows={4} value={editInterviewDraft.objectionsRisks || ''} onChange={(e) => setEditInterviewDraft({ ...editInterviewDraft, objectionsRisks: e.currentTarget.value })} />
+              <Textarea label="Next Steps" minRows={4} value={editInterviewDraft.nextSteps || ''} onChange={(e) => setEditInterviewDraft({ ...editInterviewDraft, nextSteps: e.currentTarget.value })} />
+            </SimpleGrid>
+
+            <Textarea label="Transcript (HTML)" description="MVP stores HTML; plain text is derived on save." minRows={10} value={editInterviewDraft.transcriptHtml || ''} onChange={(e) => setEditInterviewDraft({ ...editInterviewDraft, transcriptHtml: e.currentTarget.value })} />
+
+            <Group justify="flex-end">
+              <Button variant="default" onClick={() => { setEditInterviewCtx(null); setEditInterviewDraft(null); }}>Cancel</Button>
+              <Button onClick={async () => {
+                const payload: any = {
+                  leadId: editInterviewCtx.leadId,
+                  title: editInterviewDraft.title,
+                  interviewDate: editInterviewDraft.interviewDate,
+                  channel: editInterviewDraft.channel,
+                  interviewer: editInterviewDraft.interviewer,
+                  company: editInterviewDraft.company,
+                  contactName: editInterviewDraft.contactName,
+                  contactRole: editInterviewDraft.contactRole,
+                  tags: String(editInterviewDraft.tags || '').split(',').map((s: string) => s.trim()).filter(Boolean),
+                  summary: editInterviewDraft.summary,
+                  painPoints: editInterviewDraft.painPoints,
+                  currentSolution: editInterviewDraft.currentSolution,
+                  requirements: editInterviewDraft.requirements,
+                  objectionsRisks: editInterviewDraft.objectionsRisks,
+                  nextSteps: editInterviewDraft.nextSteps,
+                  transcriptHtml: editInterviewDraft.transcriptHtml,
+                };
+
+                if (editInterviewCtx.mode === 'create') {
+                  await fetch('/api/interviews', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+                } else {
+                  await fetch(`/api/interviews/${editInterviewCtx.row!.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+                }
+
+                setEditInterviewCtx(null);
+                setEditInterviewDraft(null);
+
+                // refresh lead interviews if opened
+                if (leadInterviewsCtx) {
+                  setLeadInterviewsRows([]); setLeadInterviewsCursor(null);
+                  await loadLeadInterviews({ reset: true });
+                }
+
+                // refresh global interviews tab
+                if (tab === 'interviews') {
+                  setInterviewsRows([]); setInterviewsCursor(null);
+                  await loadInterviews({ reset: true });
+                }
+              }}>Save</Button>
+            </Group>
+          </Stack>
+        ) : null}
       </Modal>
 
     </AppShell>
