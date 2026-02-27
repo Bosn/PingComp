@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActionIcon, Anchor, AppShell, Avatar, Badge, Box, Button, Card, Checkbox, Divider, Group, Modal, NumberInput, Paper, ScrollArea, Select, Slider,
   SimpleGrid, Stack, Table, Tabs, Text, TextInput, Textarea, Title, Tooltip, useMantineColorScheme,
@@ -253,6 +253,7 @@ export function App() {
   const [leadInterviewsRows, setLeadInterviewsRows] = useState<Interview[]>([]);
   const [leadInterviewsCursor, setLeadInterviewsCursor] = useState<string | null>(null);
   const [leadInterviewsLoading, setLeadInterviewsLoading] = useState(false);
+  const leadInterviewsLoadSeq = useRef(0);
 
   const [editInterviewCtx, setEditInterviewCtx] = useState<{ mode: 'create' | 'edit'; leadId: number; row?: Interview } | null>(null);
   const [editInterviewDraft, setEditInterviewDraft] = useState<any>(null);
@@ -325,22 +326,24 @@ export function App() {
     }
   }
 
-  async function loadLeadInterviews(opts?: { reset?: boolean }) {
-    if (!leadInterviewsCtx) return;
-    if (leadInterviewsLoading) return;
+  async function loadLeadInterviews(opts?: { reset?: boolean; leadId?: number }) {
+    const activeLeadId = opts?.leadId || leadInterviewsCtx?.lead.id;
+    if (!activeLeadId) return;
+    const seq = ++leadInterviewsLoadSeq.current;
     setLeadInterviewsLoading(true);
     try {
       const params = new URLSearchParams();
-      params.set('leadId', String(leadInterviewsCtx.lead.id));
+      params.set('leadId', String(activeLeadId));
       params.set('limit', '50');
       if (!opts?.reset && leadInterviewsCursor) params.set('cursor', leadInterviewsCursor);
       const r = await fetch(`/api/interviews?${params.toString()}`);
       const j = await r.json();
       const next = (j.rows || []) as Interview[];
+      if (seq !== leadInterviewsLoadSeq.current) return;
       setLeadInterviewsRows(opts?.reset ? next : [...leadInterviewsRows, ...next]);
       setLeadInterviewsCursor(j.nextCursor || null);
     } finally {
-      setLeadInterviewsLoading(false);
+      if (seq === leadInterviewsLoadSeq.current) setLeadInterviewsLoading(false);
     }
   }
 
@@ -395,6 +398,14 @@ export function App() {
     if (tab === 'leads') { loadLeads(); loadRegions(''); }
     if (tab === 'interviews') { setInterviewsCursor(null); loadInterviews({ reset: true }); }
   }, [tab]);
+
+  useEffect(() => {
+    const leadId = leadInterviewsCtx?.lead.id;
+    if (!leadId) return;
+    setLeadInterviewsRows([]);
+    setLeadInterviewsCursor(null);
+    loadLeadInterviews({ reset: true, leadId });
+  }, [leadInterviewsCtx?.lead.id]);
 
   useEffect(() => {
     if (tab !== 'leads') return;
@@ -798,7 +809,11 @@ export function App() {
                               <Text size="xs" c="dimmed" lineClamp={1} style={{ whiteSpace: 'nowrap' }}>{r.source || '-'}</Text>
                             </Tooltip>
                           </Table.Td>
-                          <Table.Td style={{ paddingTop: 10, paddingBottom: 10 }}><Badge color={scoreColor(r.tidb_potential_score ?? 0)} style={{ minWidth: 36, justifyContent: 'center' }}>{r.tidb_potential_score ?? '-'}</Badge></Table.Td>
+                          <Table.Td style={{ paddingTop: 10, paddingBottom: 10 }}>
+                            {r.tidb_potential_score == null
+                              ? '-'
+                              : <Badge color={scoreColor(r.tidb_potential_score)} style={{ minWidth: 36, justifyContent: 'center' }}>{r.tidb_potential_score}</Badge>}
+                          </Table.Td>
                           <Table.Td style={{ paddingTop: 10, paddingBottom: 10 }}>{r.lead_status}</Table.Td>
                           <Table.Td style={{ paddingTop: 10, paddingBottom: 10 }}>{r.owner || '-'}</Table.Td>
                           <Table.Td style={{ paddingTop: 10, paddingBottom: 10 }}>{r.manual_locked ? <Tooltip label="LOCKED" withArrow><ActionIcon variant="light" color="violet" size="sm"><IconLock size={13} /></ActionIcon></Tooltip> : '-'}</Table.Td>
@@ -811,9 +826,6 @@ export function App() {
                               <Button variant="light" color="blue" size="xs" leftSection={<IconEdit size={14} />} onClick={() => setSelected({ ...r })}>{t.edit}</Button>
                               <Button variant="light" color="grape" size="xs" leftSection={<IconNotes size={14} />} onClick={() => {
                                 setLeadInterviewsCtx({ lead: { ...r } });
-                                setLeadInterviewsRows([]);
-                                setLeadInterviewsCursor(null);
-                                window.setTimeout(() => loadLeadInterviews({ reset: true }), 0);
                               }}>{t.interviews}</Button>
                               <Button variant="light" color="red" size="xs" leftSection={<IconTrash size={14} />} onClick={() => requestDeleteOne(r.id)}>{t.delete}</Button>
                             </Group>
@@ -1019,7 +1031,7 @@ export function App() {
 
       <Modal
         opened={!!leadInterviewsCtx}
-        onClose={() => { setLeadInterviewsCtx(null); setLeadInterviewsRows([]); setLeadInterviewsCursor(null); }}
+        onClose={() => { leadInterviewsLoadSeq.current += 1; setLeadInterviewsCtx(null); setLeadInterviewsRows([]); setLeadInterviewsCursor(null); setLeadInterviewsLoading(false); }}
         title={leadInterviewsCtx ? `Lead Interviews · ${leadInterviewsCtx.lead.name} (#${leadInterviewsCtx.lead.id})` : 'Lead Interviews'}
         size="xl"
       >
