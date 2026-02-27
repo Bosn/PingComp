@@ -66,7 +66,7 @@ const I18N = {
     filter: '筛选', reset: '重置', search: '搜索 name/owner/vertical/source/tags', minScore: '最低分', status: '状态', region: '国家/地区', creator: 'Creator', page: '页码', pageSize: '每页条数',
     lockOnly: '仅锁定', prev: '上一页', next: '下一页', edit: '编辑', saveLock: '保存并锁定', total: '总线索',
     locked: '人工锁定', avg: '平均分', lockRate: '锁定占比', exportCsv: '导出CSV', runBatch: '执行一轮(20条)',
-    enqueue: '入队', noData: '暂无数据', trend7d: '近7天更新趋势', scoreDist: '评分分布', enrichDist: 'Enrich状态',
+    enqueue: '入队', noData: '暂无数据', loading: '加载中…', trend7d: '近7天更新趋势', scoreDist: '评分分布', enrichDist: 'Enrich状态',
     bulkAction: '批量动作', apply: '执行', selected: '已选', quickViews: '快捷视图', savedViews: '已保存视图', saveView: '保存当前视图', deleteView: '删除视图', viewName: '视图名', account: '账户', logout: '退出', delete: '删除', deleteConfirm: '确认删除该线索？', deleteModalTitle: '确认删除', deleteModalDesc: '删除后不可恢复，请确认操作。', cancel: '取消', confirmDelete: '确认删除', askAgent: '问问 Agent', askPlaceholder: '例如：找出 owner 为某人、分数大于80的客户', sessions: '会话', newSession: '新建会话', deleteSession: '删除会话', sessionName: '会话名称',
   },
   en: {
@@ -74,7 +74,7 @@ const I18N = {
     filter: 'Filter', reset: 'Reset', search: 'Search name/owner/vertical/source/tags', minScore: 'Min score', status: 'Status', region: 'Country/Region', creator: 'Creator', pageSize: 'Page size',
     page: 'Page', lockOnly: 'Locked only', prev: 'Prev', next: 'Next', edit: 'Edit', saveLock: 'Save & lock', total: 'Total leads',
     locked: 'Manual locked', avg: 'Avg score', lockRate: 'Lock ratio', exportCsv: 'Export CSV', runBatch: 'Run batch (20)',
-    enqueue: 'Enqueue', noData: 'No data', trend7d: '7-day update trend', scoreDist: 'Score distribution', enrichDist: 'Enrich status',
+    enqueue: 'Enqueue', noData: 'No data', loading: 'Loading…', trend7d: '7-day update trend', scoreDist: 'Score distribution', enrichDist: 'Enrich status',
     bulkAction: 'Bulk action', apply: 'Apply', selected: 'Selected', quickViews: 'Quick views', savedViews: 'Saved views', saveView: 'Save current view', deleteView: 'Delete view', viewName: 'View name', account: 'Account', logout: 'Logout', delete: 'Delete', deleteConfirm: 'Delete this lead?', deleteModalTitle: 'Confirm deletion', deleteModalDesc: 'This operation cannot be undone.', cancel: 'Cancel', confirmDelete: 'Delete', askAgent: 'Ask Agent', askPlaceholder: 'e.g. find leads with score >= 80 and a specific owner', sessions: 'Sessions', newSession: 'New Session', deleteSession: 'Delete Session', sessionName: 'Session Name',
   },
 } as const;
@@ -342,6 +342,40 @@ export function App() {
     } finally {
       setLeadInterviewsLoading(false);
     }
+  }
+
+  function toInterviewDraft(it: Interview) {
+    return {
+      title: it.title,
+      interviewDate: it.interview_date,
+      channel: it.channel,
+      interviewer: it.interviewer || '',
+      company: it.company || '',
+      contactName: it.contact_name || '',
+      contactRole: it.contact_role || '',
+      tags: (it.tags || ''),
+      summary: it.summary || '',
+      painPoints: it.pain_points || '',
+      currentSolution: it.current_solution || '',
+      requirements: it.requirements || '',
+      objectionsRisks: it.objections_risks || '',
+      nextSteps: it.next_steps || '',
+      transcriptHtml: it.transcript_html || '',
+    };
+  }
+
+  async function openInterviewEditor(it: Interview) {
+    let detail = it;
+    try {
+      const r = await fetch(`/api/interviews/${it.id}`);
+      if (r.ok) {
+        const j = await r.json();
+        if (j?.row) detail = j.row as Interview;
+      }
+    } catch {}
+
+    setEditInterviewCtx({ mode: 'edit', leadId: detail.lead_id || it.lead_id, row: detail });
+    setEditInterviewDraft(toInterviewDraft(detail));
   }
 
   async function loadRegions(q = '') {
@@ -730,7 +764,7 @@ export function App() {
                 <Divider my="sm" />
 
                 <ScrollArea type="always" offsetScrollbars>
-                  <Table striped highlightOnHover withTableBorder withColumnBorders miw={1900} verticalSpacing={2} style={{ borderColor: colorScheme === 'dark' ? 'rgba(120,140,180,0.35)' : undefined }} fontSize="sm">
+                  <Table striped highlightOnHover withTableBorder withColumnBorders miw={2100} verticalSpacing={2} style={{ borderColor: colorScheme === 'dark' ? 'rgba(120,140,180,0.35)' : undefined }} fontSize="sm">
                     <Table.Thead>
                       <Table.Tr>
                         <Table.Th w={46}><Checkbox checked={allChecked} onChange={(e) => {
@@ -738,58 +772,58 @@ export function App() {
                           setSelectedIds(v ? new Set(sortedRows.map(r => r.id)) : new Set());
                         }} /></Table.Th>
                         <SortHead label="ID" k="id" w={64} /><SortHead label="Name" k="name" w={160} /><Table.Th w={160} style={thStyle}>Source</Table.Th><SortHead label="Score" k="score" w={88} /><SortHead label="Status" k="lead_status" /><SortHead label="Owner" k="owner" />
-                        <Table.Th w={56} style={thStyle}>Locked</Table.Th><SortHead label="Vertical" k="vertical" /><Table.Th style={thStyle}>Region</Table.Th><SortHead label="CreatedAt" k="created_at" w={122} /><SortHead label="UpdatedAt" k="updated_at" w={122} /><Table.Th w={96} style={thStyle}>Action</Table.Th><Table.Th style={{ ...thStyle, width: 420, minWidth: 420, maxWidth: 420 }}>Reason</Table.Th><Table.Th style={thStyle}>{t.creator}</Table.Th>
+                        <Table.Th w={56} style={thStyle}>Locked</Table.Th><SortHead label="Vertical" k="vertical" /><Table.Th style={thStyle}>Region</Table.Th><SortHead label="CreatedAt" k="created_at" w={122} /><SortHead label="UpdatedAt" k="updated_at" w={122} /><Table.Th w={320} style={thStyle}>Action</Table.Th><Table.Th style={{ ...thStyle, width: 420, minWidth: 420, maxWidth: 420 }}>Reason</Table.Th><Table.Th style={thStyle}>{t.creator}</Table.Th>
                       </Table.Tr>
                     </Table.Thead>
                     <Table.Tbody>
                       {rows.length === 0 ? (
-                        <Table.Tr><Table.Td colSpan={15}><Text c="dimmed" ta="center" py="md">{t.noData}</Text></Table.Td></Table.Tr>
+                        <Table.Tr><Table.Td colSpan={15}><Text c="dimmed" ta="center" py="md">{loading ? t.loading : t.noData}</Text></Table.Td></Table.Tr>
                       ) : rows.map((r) => (
                         <Table.Tr key={r.id} style={recentEditedIds.has(r.id) ? { background: 'rgba(34,197,94,0.12)', transition: 'background 220ms ease' } : { transition: 'background 220ms ease' }}>
-                          <Table.Td>
+                          <Table.Td style={{ paddingTop: 10, paddingBottom: 10 }}>
                             <Checkbox checked={selectedIds.has(r.id)} onChange={(e) => {
                               const next = new Set(selectedIds);
                               if (e.currentTarget.checked) next.add(r.id); else next.delete(r.id);
                               setSelectedIds(next);
                             }} />
                           </Table.Td>
-                          <Table.Td style={{ paddingTop: 6, paddingBottom: 6 }}>{r.id}</Table.Td>
-                          <Table.Td style={{ paddingTop: 6, paddingBottom: 6, maxWidth: 160 }}>
+                          <Table.Td style={{ paddingTop: 10, paddingBottom: 10 }}>{r.id}</Table.Td>
+                          <Table.Td style={{ paddingTop: 10, paddingBottom: 10, maxWidth: 160 }}>
                             <Tooltip multiline w={480} withArrow label={r.name || '-'}>
                               <Text fw={600} size="sm" lineClamp={1} style={{ whiteSpace: 'nowrap' }}>{r.name}</Text>
                             </Tooltip>
                           </Table.Td>
-                          <Table.Td style={{ paddingTop: 6, paddingBottom: 6, maxWidth: 160 }}>
+                          <Table.Td style={{ paddingTop: 10, paddingBottom: 10, maxWidth: 160 }}>
                             <Tooltip multiline w={480} withArrow label={r.source || '-'}>
                               <Text size="xs" c="dimmed" lineClamp={1} style={{ whiteSpace: 'nowrap' }}>{r.source || '-'}</Text>
                             </Tooltip>
                           </Table.Td>
-                          <Table.Td style={{ paddingTop: 6, paddingBottom: 6 }}><Badge color={scoreColor(r.tidb_potential_score ?? 0)} style={{ minWidth: 36, justifyContent: 'center' }}>{r.tidb_potential_score ?? '-'}</Badge></Table.Td>
-                          <Table.Td style={{ paddingTop: 6, paddingBottom: 6 }}>{r.lead_status}</Table.Td>
-                          <Table.Td style={{ paddingTop: 6, paddingBottom: 6 }}>{r.owner || '-'}</Table.Td>
-                          <Table.Td>{r.manual_locked ? <Tooltip label="LOCKED" withArrow><ActionIcon variant="light" color="violet" size="sm"><IconLock size={13} /></ActionIcon></Tooltip> : '-'}</Table.Td>
-                          <Table.Td style={{ paddingTop: 6, paddingBottom: 6 }}>{r.vertical}</Table.Td>
-                          <Table.Td style={{ paddingTop: 6, paddingBottom: 6 }}>{r.region || '-'}</Table.Td>
-                          <Table.Td style={{ whiteSpace: 'nowrap', paddingTop: 6, paddingBottom: 6 }}>{(r.created_at || '').slice(0, 10)}</Table.Td>
-                          <Table.Td style={{ whiteSpace: 'nowrap', paddingTop: 6, paddingBottom: 6 }}>{(r.updated_at || '').slice(0, 10)}</Table.Td>
-                          <Table.Td style={{ paddingTop: 4, paddingBottom: 4 }}>
-                            <Group gap={4}>
-                              <ActionIcon variant="light" color="blue" size="sm" onClick={() => setSelected({ ...r })} title={t.edit}><IconEdit size={13} /></ActionIcon>
-                              <ActionIcon variant="light" color="grape" size="sm" onClick={() => {
+                          <Table.Td style={{ paddingTop: 10, paddingBottom: 10 }}><Badge color={scoreColor(r.tidb_potential_score ?? 0)} style={{ minWidth: 36, justifyContent: 'center' }}>{r.tidb_potential_score ?? '-'}</Badge></Table.Td>
+                          <Table.Td style={{ paddingTop: 10, paddingBottom: 10 }}>{r.lead_status}</Table.Td>
+                          <Table.Td style={{ paddingTop: 10, paddingBottom: 10 }}>{r.owner || '-'}</Table.Td>
+                          <Table.Td style={{ paddingTop: 10, paddingBottom: 10 }}>{r.manual_locked ? <Tooltip label="LOCKED" withArrow><ActionIcon variant="light" color="violet" size="sm"><IconLock size={13} /></ActionIcon></Tooltip> : '-'}</Table.Td>
+                          <Table.Td style={{ paddingTop: 10, paddingBottom: 10 }}>{r.vertical}</Table.Td>
+                          <Table.Td style={{ paddingTop: 10, paddingBottom: 10 }}>{r.region || '-'}</Table.Td>
+                          <Table.Td style={{ whiteSpace: 'nowrap', paddingTop: 10, paddingBottom: 10 }}>{(r.created_at || '').slice(0, 10)}</Table.Td>
+                          <Table.Td style={{ whiteSpace: 'nowrap', paddingTop: 10, paddingBottom: 10 }}>{(r.updated_at || '').slice(0, 10)}</Table.Td>
+                          <Table.Td style={{ paddingTop: 8, paddingBottom: 8 }}>
+                            <Group gap={8} wrap="nowrap">
+                              <Button variant="light" color="blue" size="xs" leftSection={<IconEdit size={14} />} onClick={() => setSelected({ ...r })}>{t.edit}</Button>
+                              <Button variant="light" color="grape" size="xs" leftSection={<IconNotes size={14} />} onClick={() => {
                                 setLeadInterviewsCtx({ lead: { ...r } });
                                 setLeadInterviewsRows([]);
                                 setLeadInterviewsCursor(null);
                                 window.setTimeout(() => loadLeadInterviews({ reset: true }), 0);
-                              }} title="Interviews"><IconNotes size={13} /></ActionIcon>
-                              <ActionIcon variant="light" color="red" size="sm" onClick={() => requestDeleteOne(r.id)} title={t.delete}><IconTrash size={13} /></ActionIcon>
+                              }}>{t.interviews}</Button>
+                              <Button variant="light" color="red" size="xs" leftSection={<IconTrash size={14} />} onClick={() => requestDeleteOne(r.id)}>{t.delete}</Button>
                             </Group>
                           </Table.Td>
-                          <Table.Td style={{ width: 420, minWidth: 420, maxWidth: 420, paddingTop: 6, paddingBottom: 6 }}>
+                          <Table.Td style={{ width: 420, minWidth: 420, maxWidth: 420, paddingTop: 10, paddingBottom: 10 }}>
                             <Tooltip multiline w={560} withArrow label={r.tidb_potential_reason || '-'}>
                               <Text size="sm" lineClamp={1}>{r.tidb_potential_reason || ''}</Text>
                             </Tooltip>
                           </Table.Td>
-                          <Table.Td style={{ paddingTop: 6, paddingBottom: 6 }}><Text size="xs" c="dimmed" lineClamp={1}>{r.creator || '-'}</Text></Table.Td>
+                          <Table.Td style={{ paddingTop: 10, paddingBottom: 10 }}><Text size="xs" c="dimmed" lineClamp={1}>{r.creator || '-'}</Text></Table.Td>
                         </Table.Tr>
                       ))}
                     </Table.Tbody>
@@ -867,26 +901,7 @@ export function App() {
                           <Table.Td style={{ maxWidth: 220 }}><Text size="xs" c="dimmed" lineClamp={1}>{it.tags || '-'}</Text></Table.Td>
                           <Table.Td>
                             <Group gap={6}>
-                              <ActionIcon variant="light" color="blue" onClick={() => {
-                                setEditInterviewCtx({ mode: 'edit', leadId: it.lead_id, row: it });
-                                setEditInterviewDraft({
-                                  title: it.title,
-                                  interviewDate: it.interview_date,
-                                  channel: it.channel,
-                                  interviewer: it.interviewer || '',
-                                  company: it.company || '',
-                                  contactName: it.contact_name || '',
-                                  contactRole: it.contact_role || '',
-                                  tags: (it.tags || ''),
-                                  summary: it.summary || '',
-                                  painPoints: it.pain_points || '',
-                                  currentSolution: it.current_solution || '',
-                                  requirements: it.requirements || '',
-                                  objectionsRisks: it.objections_risks || '',
-                                  nextSteps: it.next_steps || '',
-                                  transcriptHtml: it.transcript_html || '',
-                                });
-                              }}><IconEdit size={14} /></ActionIcon>
+                              <ActionIcon variant="light" color="blue" onClick={() => { openInterviewEditor(it); }}><IconEdit size={14} /></ActionIcon>
                               <ActionIcon variant="light" onClick={() => window.open(`/interviews/${it.id}/export.md`, '_blank')}><IconDownload size={14} /></ActionIcon>
                             </Group>
                           </Table.Td>
@@ -1055,26 +1070,7 @@ export function App() {
                       <Table.Td><Text size="xs" c="dimmed" lineClamp={1}>{it.tags || '-'}</Text></Table.Td>
                       <Table.Td>
                         <Group gap={6}>
-                          <ActionIcon variant="light" color="blue" onClick={() => {
-                            setEditInterviewCtx({ mode: 'edit', leadId: it.lead_id, row: it });
-                            setEditInterviewDraft({
-                              title: it.title,
-                              interviewDate: it.interview_date,
-                              channel: it.channel,
-                              interviewer: it.interviewer || '',
-                              company: it.company || '',
-                              contactName: it.contact_name || '',
-                              contactRole: it.contact_role || '',
-                              tags: (it.tags || ''),
-                              summary: it.summary || '',
-                              painPoints: it.pain_points || '',
-                              currentSolution: it.current_solution || '',
-                              requirements: it.requirements || '',
-                              objectionsRisks: it.objections_risks || '',
-                              nextSteps: it.next_steps || '',
-                              transcriptHtml: it.transcript_html || '',
-                            });
-                          }}><IconEdit size={14} /></ActionIcon>
+                          <ActionIcon variant="light" color="blue" onClick={() => { openInterviewEditor(it); }}><IconEdit size={14} /></ActionIcon>
                           <ActionIcon variant="light" onClick={() => window.open(`/interviews/${it.id}/export.md`, '_blank')}><IconDownload size={14} /></ActionIcon>
                           <ActionIcon variant="light" color="red" onClick={async () => {
                             const ok = window.confirm('Soft delete this interview?');

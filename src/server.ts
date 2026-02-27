@@ -14,7 +14,16 @@ app.use(express.static('public'));
 
 
 const authEnabled = String(process.env.AUTH0_ENABLED || '').toLowerCase() === 'true';
-const baseURL = process.env.APP_BASE_URL || `http://localhost:${port}`;
+// express-openid-connect requires a baseURL in config; real redirect/logout URLs are set per-request below.
+const middlewareBaseURL = process.env.APP_BASE_URL || `http://localhost:${port}`;
+
+function getRequestBaseUrl(req: Request): string {
+  const forwardedProto = String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim();
+  const proto = forwardedProto || req.protocol || 'http';
+  const forwardedHost = String(req.headers['x-forwarded-host'] || '').split(',')[0].trim();
+  const host = forwardedHost || req.get('host') || `localhost:${port}`;
+  return `${proto}://${host}`;
+}
 
 app.get('/auth/denied', (req: Request, res: Response) => {
   const raw = String(req.query.message || '').replace(/[<>]/g, '');
@@ -108,13 +117,13 @@ if (authEnabled) {
     authRequired: false,
     auth0Logout: true,
     secret: process.env.AUTH0_SESSION_SECRET || 'pingcomp-dev-session-secret-change-me',
-    baseURL,
+    baseURL: middlewareBaseURL,
     clientID: process.env.AUTH0_CLIENT_ID || '',
     issuerBaseURL: process.env.AUTH0_ISSUER_BASE_URL || '',
     clientSecret: process.env.AUTH0_CLIENT_SECRET || '',
     routes: {
-      login: '/login',
-      logout: '/logout',
+      login: false,
+      logout: false,
       callback: '/callback',
     },
   }));
@@ -126,22 +135,32 @@ const ensureAuth = (req: Request, res: Response, next: NextFunction) => {
   if (isAuthed) return next();
   const wantsJson = req.path.startsWith('/api/') || String(req.headers.accept || '').includes('application/json');
   if (wantsJson) return res.status(401).json({ ok: false, error: 'unauthorized' });
-  return res.redirect('/login');
+  return res.redirect('/login-pingcap');
 };
 
 app.get('/api/health', (_req: Request, res: Response) => res.json({ ok: true }));
 
+app.get('/login', (_req: Request, res: Response) => res.redirect('/login-pingcap'));
+
 app.get('/login-pingcap', (req: Request, res: Response) => {
   if (!authEnabled || !(res as any).oidc?.login) return res.redirect('/login');
+  const callbackUrl = `${getRequestBaseUrl(req)}/callback`;
   return (res as any).oidc.login({
     returnTo: '/app',
     authorizationParams: {
+      redirect_uri: callbackUrl,
       connection: 'google-oauth2',
       prompt: 'login',
       login_hint: '@pingcap.com',
       scope: 'openid profile email',
     },
   });
+});
+
+app.get('/logout', (req: Request, res: Response) => {
+  if (!authEnabled || !(res as any).oidc?.logout) return res.redirect('/');
+  const returnTo = getRequestBaseUrl(req);
+  return (res as any).oidc.logout({ returnTo });
 });
 
 
