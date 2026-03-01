@@ -643,7 +643,7 @@ app.get('/api/leads', async (req: Request, res: Response) => {
   const offset = (safePage - 1) * pageSize;
 
   const [rows] = await conn.query(
-    `SELECT id,name,region,vertical,funding,linkedin,latest_news,source,tidb_potential_score,tidb_potential_reason,manual_locked,manual_note,lead_status,owner,creator,tags,source_confidence,enrich_status,created_at,updated_at FROM \`${TABLE}\` ${where} ORDER BY ${orderBy} LIMIT ? OFFSET ?`,
+    `SELECT id,name,region,vertical,funding,linkedin,emails,latest_news,source,tidb_potential_score,tidb_potential_reason,manual_locked,manual_note,lead_status,owner,creator,tags,source_confidence,enrich_status,created_at,updated_at FROM \`${TABLE}\` ${where} ORDER BY ${orderBy} LIMIT ? OFFSET ?`,
     [...args, pageSize, offset]
   );
   await conn.end();
