@@ -73,7 +73,7 @@ type SavedView = {
 
 const I18N = {
   zh: {
-    title: 'PingComp', subtitle: '潜在客户人工清洗与标注', agent: 'Agent', dashboard: '仪表盘', leads: '线索管理', interviews: '访谈记录', enrich: 'Enrich 队列', outreach: 'Outreach Center', emails: 'Emails',
+    title: 'PingComp', subtitle: '潜在客户人工清洗与标注', agent: 'Agent', dashboard: '仪表盘', leads: '线索管理', interviews: '访谈记录', enrich: 'Enrich 队列', outreach: '触达中心', emails: '触达邮件', leadId: '线索ID', email: '邮箱', from: '起始', to: '截止', sentAt: '发送时间', subject: '标题', sender: '发送方', content: '内容', apply: '应用', reset: '重置', loading: '加载中…',
     filter: '筛选', reset: '重置', search: '搜索 name/owner/vertical/source/tags', minScore: '最低分', status: '状态', region: '国家/地区', creator: 'Creator', page: '页码', pageSize: '每页条数',
     lockOnly: '仅锁定', prev: '上一页', next: '下一页', edit: '编辑', saveLock: '保存并锁定', total: '总线索',
     locked: '人工锁定', avg: '平均分', lockRate: '锁定占比', exportCsv: '导出CSV', runBatch: '执行一轮(20条)',
@@ -81,7 +81,7 @@ const I18N = {
     bulkAction: '批量动作', apply: '执行', selected: '已选', quickViews: '快捷视图', savedViews: '已保存视图', saveView: '保存当前视图', deleteView: '删除视图', viewName: '视图名', account: '账户', logout: '退出', delete: '删除', deleteConfirm: '确认删除该线索？', deleteModalTitle: '确认删除', deleteModalDesc: '删除后不可恢复，请确认操作。', cancel: '取消', confirmDelete: '确认删除', askAgent: '问问 Agent', askPlaceholder: '例如：找出 owner 为某人、分数大于80的客户', sessions: '会话', newSession: '新建会话', deleteSession: '删除会话', sessionName: '会话名称',
   },
   en: {
-    title: 'PingComp', subtitle: 'Lead ops workspace', agent: 'Agent', dashboard: 'Dashboard', leads: 'Leads', interviews: 'Interviews', enrich: 'Enrich Queue', outreach: 'Outreach Center', emails: 'Emails',
+    title: 'PingComp', subtitle: 'Lead ops workspace', agent: 'Agent', dashboard: 'Dashboard', leads: 'Leads', interviews: 'Interviews', enrich: 'Enrich Queue', outreach: 'Outreach Center', emails: 'Emails', leadId: 'Lead ID', email: 'Email', from: 'From', to: 'To', sentAt: 'Sent At', subject: 'Subject', sender: 'Sender', content: 'Content', apply: 'Apply', reset: 'Reset', loading: 'loading…',
     filter: 'Filter', reset: 'Reset', search: 'Search name/owner/vertical/source/tags', minScore: 'Min score', status: 'Status', region: 'Country/Region', creator: 'Creator', pageSize: 'Page size',
     page: 'Page', lockOnly: 'Locked only', prev: 'Prev', next: 'Next', edit: 'Edit', saveLock: 'Save & lock', total: 'Total leads',
     locked: 'Manual locked', avg: 'Avg score', lockRate: 'Lock ratio', exportCsv: 'Export CSV', runBatch: 'Run batch (20)',
@@ -919,12 +919,12 @@ export function App() {
             <Box px="xs">
               <Paper withBorder p="md" radius="md" style={{ borderColor: colorScheme === 'dark' ? 'rgba(120,140,180,0.35)' : undefined }}>
                 <Group wrap="wrap" align="end">
-                  <TextInput w={140} label="LeadId" placeholder="(optional)" value={outreachLeadId} onChange={(e) => setOutreachLeadId(e.currentTarget.value)} />
-                  <TextInput w={260} label="Email" placeholder="(optional)" value={outreachEmail} onChange={(e) => setOutreachEmail(e.currentTarget.value)} />
-                  <TextInput w={140} label="From" placeholder="YYYY-MM-DD" value={outreachFrom} onChange={(e) => setOutreachFrom(e.currentTarget.value)} />
-                  <TextInput w={140} label="To" placeholder="YYYY-MM-DD" value={outreachTo} onChange={(e) => setOutreachTo(e.currentTarget.value)} />
-                  <Button variant="default" leftSection={<IconFilter size={14} />} loading={outreachLoading} onClick={() => { setOutreachExpanded(new Set()); loadOutreachSends(); }}>Apply</Button>
-                  <Button variant="subtle" onClick={() => { setOutreachLeadId(''); setOutreachEmail(''); setOutreachFrom(''); setOutreachTo(''); setOutreachExpanded(new Set()); }}>Reset</Button>
+                  <TextInput w={140} label={(t as any).leadId || 'LeadId'} placeholder="(optional)" value={outreachLeadId} onChange={(e) => setOutreachLeadId(e.currentTarget.value)} />
+                  <TextInput w={260} label={(t as any).email || 'Email'} placeholder="(optional)" value={outreachEmail} onChange={(e) => setOutreachEmail(e.currentTarget.value)} />
+                  <TextInput w={140} label={(t as any).from || 'From'} placeholder="YYYY-MM-DD" value={outreachFrom} onChange={(e) => setOutreachFrom(e.currentTarget.value)} />
+                  <TextInput w={140} label={(t as any).to || 'To'} placeholder="YYYY-MM-DD" value={outreachTo} onChange={(e) => setOutreachTo(e.currentTarget.value)} />
+                  <Button variant="default" leftSection={<IconFilter size={14} />} loading={outreachLoading} onClick={() => { setOutreachExpanded(new Set()); loadOutreachSends(); }}>{(t as any).apply || 'Apply'}</Button>
+                  <Button variant="subtle" onClick={() => { setOutreachLeadId(''); setOutreachEmail(''); setOutreachFrom(''); setOutreachTo(''); setOutreachExpanded(new Set()); }}>{(t as any).reset || 'Reset'}</Button>
                 </Group>
 
                 <Divider my="sm" />
@@ -943,7 +943,7 @@ export function App() {
                     </Table.Thead>
                     <Table.Tbody>
                       {outreachRows.length === 0 ? (
-                        <Table.Tr><Table.Td colSpan={6}><Text c="dimmed" ta="center" py="md">{outreachLoading ? 'loading…' : t.noData}</Text></Table.Td></Table.Tr>
+                        <Table.Tr><Table.Td colSpan={6}><Text c="dimmed" ta="center" py="md">{outreachLoading ? ((t as any).loading || 'loading…') : t.noData}</Text></Table.Td></Table.Tr>
                       ) : outreachRows.map((r0) => {
                         const key = Number((r0 as any).id || 0) || Number(r0.lead_id * 1000000 + (new Date(r0.sent_at || '').getTime() % 1000000));
                         const expanded = outreachExpanded.has(key);
@@ -982,15 +982,15 @@ export function App() {
             <Box px="xs">
               <Paper withBorder p="md" radius="md" style={{ borderColor: colorScheme === 'dark' ? 'rgba(120,140,180,0.35)' : undefined }}>
                 <Group wrap="wrap" align="end">
-                  <TextInput w={240} label="LeadId" placeholder="(optional)" value={interviewsTabLeadId} onChange={(e) => setInterviewsTabLeadId(e.currentTarget.value)} />
+                  <TextInput w={240} label={(t as any).leadId || 'LeadId'} placeholder="(optional)" value={interviewsTabLeadId} onChange={(e) => setInterviewsTabLeadId(e.currentTarget.value)} />
                   <TextInput w={260} label="Search" placeholder="q (title/summary/transcript)" value={interviewsTabQ} onChange={(e) => setInterviewsTabQ(e.currentTarget.value)} />
                   <TextInput w={150} label="Channel" placeholder="meeting/wechat/..." value={interviewsTabChannel} onChange={(e) => setInterviewsTabChannel(e.currentTarget.value)} />
                   <TextInput w={160} label="Interviewer" placeholder="(optional)" value={interviewsTabInterviewer} onChange={(e) => setInterviewsTabInterviewer(e.currentTarget.value)} />
                   <TextInput w={220} label="Tags (comma)" placeholder="pricing,security" value={interviewsTabTags} onChange={(e) => setInterviewsTabTags(e.currentTarget.value)} />
                   <Select w={150} label="Date preset" data={[{value:'last7',label:'last7'},{value:'last30',label:'last30'},{value:'last90',label:'last90'}]} value={interviewsTabDatePreset} onChange={(v) => setInterviewsTabDatePreset(v || 'last30')} />
-                  <TextInput w={140} label="From" placeholder="YYYY-MM-DD" value={interviewsTabDateFrom} onChange={(e) => setInterviewsTabDateFrom(e.currentTarget.value)} />
-                  <TextInput w={140} label="To" placeholder="YYYY-MM-DD" value={interviewsTabDateTo} onChange={(e) => setInterviewsTabDateTo(e.currentTarget.value)} />
-                  <Button variant="default" leftSection={<IconFilter size={14} />} onClick={() => { setInterviewsRows([]); setInterviewsCursor(null); loadInterviews({ reset: true }); }}>Apply</Button>
+                  <TextInput w={140} label={(t as any).from || 'From'} placeholder="YYYY-MM-DD" value={interviewsTabDateFrom} onChange={(e) => setInterviewsTabDateFrom(e.currentTarget.value)} />
+                  <TextInput w={140} label={(t as any).to || 'To'} placeholder="YYYY-MM-DD" value={interviewsTabDateTo} onChange={(e) => setInterviewsTabDateTo(e.currentTarget.value)} />
+                  <Button variant="default" leftSection={<IconFilter size={14} />} onClick={() => { setInterviewsRows([]); setInterviewsCursor(null); loadInterviews({ reset: true }); }}>{(t as any).apply || 'Apply'}</Button>
                   <Button variant="light" leftSection={<IconDownload size={14} />} onClick={() => {
                     const p = new URLSearchParams();
                     if (interviewsTabLeadId.trim()) p.set('leadId', interviewsTabLeadId.trim());
