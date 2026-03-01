@@ -659,10 +659,19 @@ export function App() {
     else { setSortKey(k); setSortDir('desc'); }
   };
 
+  const isDark = colorScheme === 'dark';
+  const geek = {
+    border: isDark ? 'rgba(120,140,180,0.35)' : 'rgba(130,150,190,0.22)',
+    panelBg: isDark ? 'linear-gradient(180deg, rgba(15,23,42,0.62), rgba(17,24,39,0.58))' : 'linear-gradient(180deg, rgba(255,255,255,0.95), rgba(248,250,252,0.92))',
+    tabBg: isDark ? 'rgba(51,65,85,0.35)' : 'rgba(226,232,240,0.7)',
+    tabActive: isDark ? 'rgba(59,130,246,0.24)' : 'rgba(37,99,235,0.12)',
+    cardGlow: isDark ? '0 0 0 1px rgba(96,165,250,0.12), 0 10px 30px rgba(2,6,23,0.45)' : '0 0 0 1px rgba(59,130,246,0.08), 0 8px 24px rgba(30,64,175,0.08)',
+  };
+
   const thStyle: any = {
-    background: 'rgba(18,24,39,0.95)',
-    color: '#dbe7ff',
-    borderBottom: '1px solid rgba(120,140,180,0.45)',
+    background: isDark ? 'rgba(18,24,39,0.95)' : 'rgba(239,246,255,0.95)',
+    color: isDark ? '#dbe7ff' : '#1e293b',
+    borderBottom: isDark ? '1px solid rgba(120,140,180,0.45)' : '1px solid rgba(148,163,184,0.38)',
   };
 
   const SortHead = ({ label, k, w }: { label: string; k: typeof sortKey; w?: number }) => (
@@ -724,19 +733,19 @@ export function App() {
         </Paper>
 
         <Tabs value={tab} onChange={setTab}>
-          <Tabs.List>
-            <Tabs.Tab value="agent" leftSection={<IconMessageCircle size={14} />}>{t.agent}</Tabs.Tab>
-            <Tabs.Tab value="leads" leftSection={<IconBrain size={14} />}>{t.leads}</Tabs.Tab>
-            <Tabs.Tab value="outreach" leftSection={<IconActivity size={14} />}>{(t as any).outreach || 'Outreach Center'}</Tabs.Tab>
-            <Tabs.Tab value="interviews" leftSection={<IconNotes size={14} />}>{t.interviews}</Tabs.Tab>
-            <Tabs.Tab value="enrich" leftSection={<IconBolt size={14} />}>{t.enrich}</Tabs.Tab>
-            <Tabs.Tab value="dashboard" leftSection={<IconGauge size={14} />}>{t.dashboard}</Tabs.Tab>
+          <Tabs.List style={{ borderRadius: 12, padding: 6, background: geek.tabBg, border: `1px solid ${geek.border}` }}>
+            <Tabs.Tab value="agent" leftSection={<IconMessageCircle size={14} />} style={{ borderRadius: 8 }} color="blue">{t.agent}</Tabs.Tab>
+            <Tabs.Tab value="leads" leftSection={<IconBrain size={14} />} style={{ borderRadius: 8 }} color="blue">{t.leads}</Tabs.Tab>
+            <Tabs.Tab value="outreach" leftSection={<IconActivity size={14} />} style={{ borderRadius: 8 }} color="blue">{(t as any).outreach || 'Outreach Center'}</Tabs.Tab>
+            <Tabs.Tab value="interviews" leftSection={<IconNotes size={14} />} style={{ borderRadius: 8 }} color="blue">{t.interviews}</Tabs.Tab>
+            <Tabs.Tab value="enrich" leftSection={<IconBolt size={14} />} style={{ borderRadius: 8 }} color="blue">{t.enrich}</Tabs.Tab>
+            <Tabs.Tab value="dashboard" leftSection={<IconGauge size={14} />} style={{ borderRadius: 8 }} color="blue">{t.dashboard}</Tabs.Tab>
           </Tabs.List>
 
 
           <Tabs.Panel value="agent" pt="md">
             <Box px="xs" style={{ minHeight: "calc(100vh - 210px)" }}>
-              <Paper withBorder p="md" radius="md" style={{ borderColor: colorScheme === 'dark' ? 'rgba(120,140,180,0.35)' : undefined, minHeight: "calc(100vh - 230px)", display: "flex", flexDirection: "column" }}>
+              <Paper withBorder p="md" radius="md" style={{ borderColor: geek.border, background: geek.panelBg, boxShadow: geek.cardGlow, minHeight: "calc(100vh - 230px)", display: "flex", flexDirection: "column" }}>
                 <Stack gap="sm" style={{ flex: 1 }}>
                   <Group justify="space-between" wrap="wrap">
                     <Group>
@@ -803,12 +812,12 @@ export function App() {
 
           <Tabs.Panel value="leads" pt="md">
             <Box px="xs">
-              <Paper withBorder p="md" radius="md" style={{ borderColor: colorScheme === 'dark' ? 'rgba(120,140,180,0.35)' : undefined }}>
+              <Paper withBorder p="md" radius="md" style={{ borderColor: geek.border, background: geek.panelBg, boxShadow: geek.cardGlow }}>
                 <Group wrap="wrap" align="end" justify="space-between">
                   <Group wrap="wrap" align="end">
                     <TextInput leftSection={<IconFilter size={14} />} w={320} placeholder={t.search} value={q} onChange={(e) => setQ(e.currentTarget.value)} />
                     <Select w={170} placeholder={t.status} data={statusOptions} value={status} onChange={setStatus} clearable />
-                    <Select w={210} placeholder={t.region} data={regionOptions} value={region} onChange={setRegion} searchable clearable searchValue={regionSearch} onSearchChange={setRegionSearch} rightSection={regionLoading ? <Text size="xs" c="dimmed">...</Text> : null} />
+                    <Select w={210} placeholder={t.region} data={regionOptions} value={region} onChange={setRegion} searchable clearable searchValue={regionSearch} onSearchChange={setRegionSearch} rightSection={regionLoading ? <Text size="xs" c="dimmed" style={{ opacity: 0.9 }}>...</Text> : null} />
                     <Button variant="default" onClick={() => setShowMoreFilters(v => !v)}>{showMoreFilters ? 'Less' : 'More'}</Button>
                     <Button variant="subtle" onClick={() => { setQ(''); setMinScore(0); setStatus(null); setRegion(null); setLockedOnly(false); setPage(1); setShowMoreFilters(false); }}>{t.reset}</Button>
                   </Group>
@@ -853,7 +862,7 @@ export function App() {
                 <Divider my="sm" />
 
                 <ScrollArea type="always" offsetScrollbars>
-                  <Table striped highlightOnHover withTableBorder withColumnBorders miw={2100} verticalSpacing={2} style={{ borderColor: colorScheme === 'dark' ? 'rgba(120,140,180,0.35)' : undefined }}>
+                  <Table striped highlightOnHover withTableBorder withColumnBorders miw={2100} verticalSpacing={2} style={{ borderColor: geek.border, background: geek.panelBg, boxShadow: geek.cardGlow }}>
                     <Table.Thead>
                       <Table.Tr>
                         <Table.Th w={46}><Checkbox checked={allChecked} onChange={(e) => {
@@ -942,7 +951,7 @@ export function App() {
 
           <Tabs.Panel value="outreach" pt="md">
             <Box px="xs">
-              <Paper withBorder p="md" radius="md" style={{ borderColor: colorScheme === 'dark' ? 'rgba(120,140,180,0.35)' : undefined }}>
+              <Paper withBorder p="md" radius="md" style={{ borderColor: geek.border, background: geek.panelBg, boxShadow: geek.cardGlow }}>
                 <Group wrap="wrap" align="end">
                   <TextInput w={140} label={(t as any).leadId || 'LeadId'} placeholder="(optional)" value={outreachLeadId} onChange={(e) => setOutreachLeadId(e.currentTarget.value)} />
                   <TextInput w={260} label={(t as any).email || 'Email'} placeholder="(optional)" value={outreachEmail} onChange={(e) => setOutreachEmail(e.currentTarget.value)} />
@@ -1013,7 +1022,7 @@ export function App() {
 
           <Tabs.Panel value="interviews" pt="md">
             <Box px="xs">
-              <Paper withBorder p="md" radius="md" style={{ borderColor: colorScheme === 'dark' ? 'rgba(120,140,180,0.35)' : undefined }}>
+              <Paper withBorder p="md" radius="md" style={{ borderColor: geek.border, background: geek.panelBg, boxShadow: geek.cardGlow }}>
                 <Group wrap="wrap" align="end">
                   <TextInput w={240} label={(t as any).leadId || 'LeadId'} placeholder="(optional)" value={interviewsTabLeadId} onChange={(e) => setInterviewsTabLeadId(e.currentTarget.value)} />
                   <TextInput w={260} label="Search" placeholder="q (title/summary/transcript)" value={interviewsTabQ} onChange={(e) => setInterviewsTabQ(e.currentTarget.value)} />
