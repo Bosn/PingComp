@@ -9,6 +9,7 @@ type Lead = {
   id: number; name: string; region?: string; vertical: string; source: string;
   tidb_potential_score: number | null; tidb_potential_reason: string; lead_status: string; owner: string;
   manual_locked: number; creator?: string; created_at?: string; updated_at?: string; funding?: string; linkedin?: string;
+  emails?: string | null;
   latest_news?: string; manual_note?: string; tags?: string; source_confidence?: number | null; enrich_status?: string;
 };
 
@@ -46,6 +47,16 @@ type Interview = {
 };
 type EnrichPayload = { rows: EnrichJob[]; stats: { pending: number; running: number; done_count: number; failed: number } };
 
+type OutreachEmailSend = {
+  id?: number;
+  lead_id: number;
+  email: string;
+  sent_at: string;
+  subject?: string | null;
+  sender?: string | null;
+  content?: string | null;
+};
+
 type ChartPayload = { type: 'pie' | 'line' | 'bar'; title?: string; labels: string[]; values: number[] };
 
 type ChatTurn = { role: 'user' | 'assistant'; text: string; rows?: Lead[]; chart?: ChartPayload };
@@ -62,7 +73,7 @@ type SavedView = {
 
 const I18N = {
   zh: {
-    title: 'PingComp', subtitle: '潜在客户人工清洗与标注', agent: 'Agent', dashboard: '仪表盘', leads: '线索管理', interviews: '访谈记录', enrich: 'Enrich 队列',
+    title: 'PingComp', subtitle: '潜在客户人工清洗与标注', agent: 'Agent', dashboard: '仪表盘', leads: '线索管理', interviews: '访谈记录', enrich: 'Enrich 队列', outreach: 'Outreach Center', emails: 'Emails',
     filter: '筛选', reset: '重置', search: '搜索 name/owner/vertical/source/tags', minScore: '最低分', status: '状态', region: '国家/地区', creator: 'Creator', page: '页码', pageSize: '每页条数',
     lockOnly: '仅锁定', prev: '上一页', next: '下一页', edit: '编辑', saveLock: '保存并锁定', total: '总线索',
     locked: '人工锁定', avg: '平均分', lockRate: '锁定占比', exportCsv: '导出CSV', runBatch: '执行一轮(20条)',
@@ -70,7 +81,7 @@ const I18N = {
     bulkAction: '批量动作', apply: '执行', selected: '已选', quickViews: '快捷视图', savedViews: '已保存视图', saveView: '保存当前视图', deleteView: '删除视图', viewName: '视图名', account: '账户', logout: '退出', delete: '删除', deleteConfirm: '确认删除该线索？', deleteModalTitle: '确认删除', deleteModalDesc: '删除后不可恢复，请确认操作。', cancel: '取消', confirmDelete: '确认删除', askAgent: '问问 Agent', askPlaceholder: '例如：找出 owner 为某人、分数大于80的客户', sessions: '会话', newSession: '新建会话', deleteSession: '删除会话', sessionName: '会话名称',
   },
   en: {
-    title: 'PingComp', subtitle: 'Lead ops workspace', agent: 'Agent', dashboard: 'Dashboard', leads: 'Leads', interviews: 'Interviews', enrich: 'Enrich Queue',
+    title: 'PingComp', subtitle: 'Lead ops workspace', agent: 'Agent', dashboard: 'Dashboard', leads: 'Leads', interviews: 'Interviews', enrich: 'Enrich Queue', outreach: 'Outreach Center', emails: 'Emails',
     filter: 'Filter', reset: 'Reset', search: 'Search name/owner/vertical/source/tags', minScore: 'Min score', status: 'Status', region: 'Country/Region', creator: 'Creator', pageSize: 'Page size',
     page: 'Page', lockOnly: 'Locked only', prev: 'Prev', next: 'Next', edit: 'Edit', saveLock: 'Save & lock', total: 'Total leads',
     locked: 'Manual locked', avg: 'Avg score', lockRate: 'Lock ratio', exportCsv: 'Export CSV', runBatch: 'Run batch (20)',
@@ -249,6 +260,15 @@ export function App() {
   const [interviewsCursor, setInterviewsCursor] = useState<string | null>(null);
   const [interviewsLoading, setInterviewsLoading] = useState(false);
 
+  // Outreach Center
+  const [outreachLeadId, setOutreachLeadId] = useState<string>('');
+  const [outreachEmail, setOutreachEmail] = useState<string>('');
+  const [outreachFrom, setOutreachFrom] = useState<string>('');
+  const [outreachTo, setOutreachTo] = useState<string>('');
+  const [outreachRows, setOutreachRows] = useState<OutreachEmailSend[]>([]);
+  const [outreachLoading, setOutreachLoading] = useState(false);
+  const [outreachExpanded, setOutreachExpanded] = useState<Set<number>>(new Set());
+
   const [leadInterviewsCtx, setLeadInterviewsCtx] = useState<{ lead: Lead } | null>(null);
   const [leadInterviewsRows, setLeadInterviewsRows] = useState<Interview[]>([]);
   const [leadInterviewsCursor, setLeadInterviewsCursor] = useState<string | null>(null);
@@ -326,6 +346,25 @@ export function App() {
     }
   }
 
+  async function loadOutreachSends() {
+    if (outreachLoading) return;
+    setOutreachLoading(true);
+    try {
+      const params = new URLSearchParams();
+      if (outreachLeadId.trim()) params.set('leadId', outreachLeadId.trim());
+      if (outreachEmail.trim()) params.set('email', outreachEmail.trim().toLowerCase());
+      if (outreachFrom.trim()) params.set('from', outreachFrom.trim());
+      if (outreachTo.trim()) params.set('to', outreachTo.trim());
+      params.set('limit', '200');
+
+      const r = await fetch('/api/outreach/email-sends?' + params.toString());
+      const j = await r.json();
+      setOutreachRows((j.rows || []) as OutreachEmailSend[]);
+    } finally {
+      setOutreachLoading(false);
+    }
+  }
+
   async function loadLeadInterviews(opts?: { reset?: boolean; leadId?: number }) {
     const activeLeadId = opts?.leadId || leadInterviewsCtx?.lead.id;
     if (!activeLeadId) return;
@@ -396,6 +435,7 @@ export function App() {
     if (tab === 'dashboard') loadDashboard();
     if (tab === 'enrich') loadEnrich();
     if (tab === 'leads') { loadLeads(); loadRegions(''); }
+    if (tab === 'outreach') { loadOutreachSends(); }
     if (tab === 'interviews') { setInterviewsCursor(null); loadInterviews({ reset: true }); }
   }, [tab]);
 
@@ -492,6 +532,18 @@ export function App() {
 
   async function saveLead() {
     if (!selected) return;
+
+    // emails are persisted via dedicated endpoint (normalizes comma/newline separated input)
+    const emailParts = String((selected as any).emails || '')
+      .split(/[,\n]+/g)
+      .map(s => s.trim())
+      .filter(Boolean);
+    await fetch(`/api/leads/${selected.id}/emails`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ emails: emailParts }),
+    });
+
     await fetch(`/api/leads/${selected.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(selected) });
     setSelected(null);
     markRecentEdited([selected.id]);
@@ -658,6 +710,7 @@ export function App() {
           <Tabs.List>
             <Tabs.Tab value="agent" leftSection={<IconMessageCircle size={14} />}>{t.agent}</Tabs.Tab>
             <Tabs.Tab value="leads" leftSection={<IconBrain size={14} />}>{t.leads}</Tabs.Tab>
+            <Tabs.Tab value="outreach" leftSection={<IconActivity size={14} />}>{(t as any).outreach || 'Outreach Center'}</Tabs.Tab>
             <Tabs.Tab value="interviews" leftSection={<IconNotes size={14} />}>{t.interviews}</Tabs.Tab>
             <Tabs.Tab value="enrich" leftSection={<IconBolt size={14} />}>{t.enrich}</Tabs.Tab>
             <Tabs.Tab value="dashboard" leftSection={<IconGauge size={14} />}>{t.dashboard}</Tabs.Tab>
@@ -775,7 +828,7 @@ export function App() {
                 <Divider my="sm" />
 
                 <ScrollArea type="always" offsetScrollbars>
-                  <Table striped highlightOnHover withTableBorder withColumnBorders miw={2100} verticalSpacing={2} style={{ borderColor: colorScheme === 'dark' ? 'rgba(120,140,180,0.35)' : undefined }} fontSize="sm">
+                  <Table striped highlightOnHover withTableBorder withColumnBorders miw={2100} verticalSpacing={2} style={{ borderColor: colorScheme === 'dark' ? 'rgba(120,140,180,0.35)' : undefined }}>
                     <Table.Thead>
                       <Table.Tr>
                         <Table.Th w={46}><Checkbox checked={allChecked} onChange={(e) => {
@@ -783,12 +836,13 @@ export function App() {
                           setSelectedIds(v ? new Set(sortedRows.map(r => r.id)) : new Set());
                         }} /></Table.Th>
                         <SortHead label="ID" k="id" w={64} /><SortHead label="Name" k="name" w={160} /><Table.Th w={160} style={thStyle}>Source</Table.Th><SortHead label="Score" k="score" w={88} /><SortHead label="Status" k="lead_status" /><SortHead label="Owner" k="owner" />
+                        <Table.Th w={240} style={thStyle}>{(t as any).emails || 'Emails'}</Table.Th>
                         <Table.Th w={56} style={thStyle}>Locked</Table.Th><SortHead label="Vertical" k="vertical" /><Table.Th style={thStyle}>Region</Table.Th><SortHead label="CreatedAt" k="created_at" w={122} /><SortHead label="UpdatedAt" k="updated_at" w={122} /><Table.Th w={320} style={thStyle}>Action</Table.Th><Table.Th style={{ ...thStyle, width: 420, minWidth: 420, maxWidth: 420 }}>Reason</Table.Th><Table.Th style={thStyle}>{t.creator}</Table.Th>
                       </Table.Tr>
                     </Table.Thead>
                     <Table.Tbody>
                       {rows.length === 0 ? (
-                        <Table.Tr><Table.Td colSpan={15}><Text c="dimmed" ta="center" py="md">{loading ? t.loading : t.noData}</Text></Table.Td></Table.Tr>
+                        <Table.Tr><Table.Td colSpan={16}><Text c="dimmed" ta="center" py="md">{loading ? t.loading : t.noData}</Text></Table.Td></Table.Tr>
                       ) : rows.map((r) => (
                         <Table.Tr key={r.id} style={recentEditedIds.has(r.id) ? { background: 'rgba(34,197,94,0.12)', transition: 'background 220ms ease' } : { transition: 'background 220ms ease' }}>
                           <Table.Td style={{ paddingTop: 10, paddingBottom: 10 }}>
@@ -816,6 +870,11 @@ export function App() {
                           </Table.Td>
                           <Table.Td style={{ paddingTop: 10, paddingBottom: 10 }}>{r.lead_status}</Table.Td>
                           <Table.Td style={{ paddingTop: 10, paddingBottom: 10 }}>{r.owner || '-'}</Table.Td>
+                          <Table.Td style={{ paddingTop: 10, paddingBottom: 10, maxWidth: 240 }}>
+                            <Tooltip multiline w={480} withArrow label={(String(r.emails || '')).split(',').join(', ') || '-'}>
+                              <Text size="xs" c="dimmed" lineClamp={2}>{(String(r.emails || '')).split(',').join(', ') || '-'}</Text>
+                            </Tooltip>
+                          </Table.Td>
                           <Table.Td style={{ paddingTop: 10, paddingBottom: 10 }}>{r.manual_locked ? <Tooltip label="LOCKED" withArrow><ActionIcon variant="light" color="violet" size="sm"><IconLock size={13} /></ActionIcon></Tooltip> : '-'}</Table.Td>
                           <Table.Td style={{ paddingTop: 10, paddingBottom: 10 }}>{r.vertical}</Table.Td>
                           <Table.Td style={{ paddingTop: 10, paddingBottom: 10 }}>{r.region || '-'}</Table.Td>
@@ -823,7 +882,7 @@ export function App() {
                           <Table.Td style={{ whiteSpace: 'nowrap', paddingTop: 10, paddingBottom: 10 }}>{(r.updated_at || '').slice(0, 10)}</Table.Td>
                           <Table.Td style={{ paddingTop: 8, paddingBottom: 8 }}>
                             <Group gap={8} wrap="nowrap">
-                              <Button variant="light" color="blue" size="xs" leftSection={<IconEdit size={14} />} onClick={() => setSelected({ ...r })}>{t.edit}</Button>
+                              <Button variant="light" color="blue" size="xs" leftSection={<IconEdit size={14} />} onClick={() => setSelected({ ...r, emails: (r.emails || '').split(',').map(s => s.trim()).filter(Boolean).join('\n') })}>{t.edit}</Button>
                               <Button variant="light" color="grape" size="xs" leftSection={<IconNotes size={14} />} onClick={() => {
                                 setLeadInterviewsCtx({ lead: { ...r } });
                               }}>{t.interviews}</Button>
@@ -852,6 +911,69 @@ export function App() {
                     <Button variant="default" disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)}>{t.next}</Button>
                   </Group>
                 </Group>
+              </Paper>
+            </Box>
+          </Tabs.Panel>
+
+          <Tabs.Panel value="outreach" pt="md">
+            <Box px="xs">
+              <Paper withBorder p="md" radius="md" style={{ borderColor: colorScheme === 'dark' ? 'rgba(120,140,180,0.35)' : undefined }}>
+                <Group wrap="wrap" align="end">
+                  <TextInput w={140} label="LeadId" placeholder="(optional)" value={outreachLeadId} onChange={(e) => setOutreachLeadId(e.currentTarget.value)} />
+                  <TextInput w={260} label="Email" placeholder="(optional)" value={outreachEmail} onChange={(e) => setOutreachEmail(e.currentTarget.value)} />
+                  <TextInput w={140} label="From" placeholder="YYYY-MM-DD" value={outreachFrom} onChange={(e) => setOutreachFrom(e.currentTarget.value)} />
+                  <TextInput w={140} label="To" placeholder="YYYY-MM-DD" value={outreachTo} onChange={(e) => setOutreachTo(e.currentTarget.value)} />
+                  <Button variant="default" leftSection={<IconFilter size={14} />} loading={outreachLoading} onClick={() => { setOutreachExpanded(new Set()); loadOutreachSends(); }}>Apply</Button>
+                  <Button variant="subtle" onClick={() => { setOutreachLeadId(''); setOutreachEmail(''); setOutreachFrom(''); setOutreachTo(''); setOutreachExpanded(new Set()); }}>Reset</Button>
+                </Group>
+
+                <Divider my="sm" />
+
+                <ScrollArea>
+                  <Table striped highlightOnHover withTableBorder withColumnBorders miw={1400}>
+                    <Table.Thead>
+                      <Table.Tr>
+                        <Table.Th>LeadId</Table.Th>
+                        <Table.Th>Email</Table.Th>
+                        <Table.Th>SentAt</Table.Th>
+                        <Table.Th>Subject</Table.Th>
+                        <Table.Th>Sender</Table.Th>
+                        <Table.Th>Content</Table.Th>
+                      </Table.Tr>
+                    </Table.Thead>
+                    <Table.Tbody>
+                      {outreachRows.length === 0 ? (
+                        <Table.Tr><Table.Td colSpan={6}><Text c="dimmed" ta="center" py="md">{outreachLoading ? 'loading…' : t.noData}</Text></Table.Td></Table.Tr>
+                      ) : outreachRows.map((r0) => {
+                        const key = Number((r0 as any).id || 0) || Number(r0.lead_id * 1000000 + (new Date(r0.sent_at || '').getTime() % 1000000));
+                        const expanded = outreachExpanded.has(key);
+                        const content = String(r0.content || '');
+                        const preview = content.length > 140 ? content.slice(0, 140) + '…' : content;
+                        return (
+                          <Table.Tr key={key}>
+                            <Table.Td>{r0.lead_id}</Table.Td>
+                            <Table.Td style={{ maxWidth: 260 }}><Tooltip withArrow label={r0.email}><Text lineClamp={1}>{r0.email}</Text></Tooltip></Table.Td>
+                            <Table.Td style={{ whiteSpace: 'nowrap' }}>{(r0.sent_at || '').replace('T', ' ').slice(0, 19)}</Table.Td>
+                            <Table.Td style={{ maxWidth: 320 }}><Tooltip multiline w={560} withArrow label={r0.subject || '-'}><Text fw={600} lineClamp={1}>{r0.subject || '-'}</Text></Tooltip></Table.Td>
+                            <Table.Td style={{ maxWidth: 200 }}><Text size="xs" c="dimmed" lineClamp={1}>{r0.sender || '-'}</Text></Table.Td>
+                            <Table.Td style={{ maxWidth: 520 }}>
+                              <Group gap={6} wrap="nowrap" align="flex-start">
+                                <Text size="xs" style={{ whiteSpace: 'pre-wrap' }}>{expanded ? (content || '-') : (preview || '-')}</Text>
+                                {content.length > 140 ? (
+                                  <ActionIcon variant="light" size="sm" onClick={() => {
+                                    const next = new Set(outreachExpanded);
+                                    if (next.has(key)) next.delete(key); else next.add(key);
+                                    setOutreachExpanded(next);
+                                  }}>{expanded ? <IconArrowUp size={14} /> : <IconArrowDown size={14} />}</ActionIcon>
+                                ) : null}
+                              </Group>
+                            </Table.Td>
+                          </Table.Tr>
+                        );
+                      })}
+                    </Table.Tbody>
+                  </Table>
+                </ScrollArea>
               </Paper>
             </Box>
           </Tabs.Panel>
@@ -1011,6 +1133,7 @@ export function App() {
             <TextInput label="Vertical" value={selected.vertical || ''} onChange={(e) => setSelected({ ...selected, vertical: e.currentTarget.value })} />
             <Select label="Status" data={statusOptions} value={selected.lead_status} onChange={(v) => setSelected({ ...selected, lead_status: v || 'new' })} />
             <TextInput label="Owner" value={selected.owner || ''} onChange={(e) => setSelected({ ...selected, owner: e.currentTarget.value })} />
+            <Textarea label={(t as any).emails || 'Emails'} description="Comma/newline separated. Saved to lead.emails." minRows={3} maxRows={6} autosize value={(selected.emails as any) || ''} onChange={(e) => setSelected({ ...selected, emails: e.currentTarget.value })} />
             <NumberInput label="Score" min={0} max={100} value={selected.tidb_potential_score ?? 0} onChange={(v: any) => setSelected({ ...selected, tidb_potential_score: Number(v) })} />
             <Textarea label="Reason" minRows={14} maxRows={14} autosize value={selected.tidb_potential_reason || ''} onChange={(e) => setSelected({ ...selected, tidb_potential_reason: e.currentTarget.value })} />
             <Button onClick={saveLead}>{t.saveLock}</Button>
