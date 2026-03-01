@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ActionIcon, Anchor, AppShell, Avatar, Badge, Box, Button, Card, Checkbox, Divider, Group, Modal, NumberInput, Paper, ScrollArea, Select, Slider,
+  ActionIcon, Anchor, AppShell, Avatar, Badge, Box, Button, Card, Checkbox, Collapse, Divider, Group, Menu, Modal, NumberInput, Paper, ScrollArea, Select, Slider,
   SimpleGrid, Stack, Table, Tabs, Text, TextInput, Textarea, Title, Tooltip, useMantineColorScheme,
 } from '@mantine/core';
 import { IconActivity, IconArrowDown, IconArrowUp, IconBolt, IconBrain, IconEdit, IconFilter, IconGauge, IconLock, IconMessageCircle, IconMoonStars, IconSend, IconSun, IconTrash, IconWorld, IconNotes, IconDownload } from '@tabler/icons-react';
@@ -206,6 +206,7 @@ export function App() {
   const [regionSearch, setRegionSearch] = useState('');
   const [regionLoading, setRegionLoading] = useState(false);
   const [lockedOnly, setLockedOnly] = useState<boolean>(false);
+  const [showMoreFilters, setShowMoreFilters] = useState<boolean>(false);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState<string>('15');
   const [totalPages, setTotalPages] = useState(1);
@@ -677,25 +678,40 @@ export function App() {
 
   return (
     <AppShell padding="md">
+      <style>{`@keyframes pcPulseGradient { 0% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } 100% { background-position: 0% 50%; } }`}</style>
       <Stack gap="md">
-        <Paper withBorder p="md" radius="md" style={{ backdropFilter: 'blur(8px)', boxShadow: '0 0 40px rgba(64,128,255,0.08) inset', borderColor: colorScheme === 'dark' ? 'rgba(120,140,180,0.45)' : undefined }}>
-          <Group justify="space-between" align="center">
-            <Group>
-              <img src="/logo.svg" alt="PingComp" width={45} height={45} />
+        <Paper withBorder p="md" radius="md" style={{ position: 'relative', overflow: 'hidden', backdropFilter: 'blur(8px)', boxShadow: '0 0 40px rgba(64,128,255,0.08) inset', borderColor: colorScheme === 'dark' ? 'rgba(120,140,180,0.45)' : undefined }}>
+          <Box style={{ position: 'absolute', inset: 0, background: colorScheme === 'dark' ? 'linear-gradient(120deg, rgba(59,130,246,0.12), rgba(139,92,246,0.1), rgba(16,185,129,0.08))' : 'linear-gradient(120deg, rgba(59,130,246,0.08), rgba(139,92,246,0.07), rgba(16,185,129,0.06))', backgroundSize: '200% 200%', animation: 'pcPulseGradient 16s ease infinite', pointerEvents: 'none' }} />
+          <Group justify="space-between" align="center" style={{ position: 'relative' }}>
+            <Group gap={10}>
+              <Box style={{ width: 46, height: 46, borderRadius: 12, display: 'grid', placeItems: 'center', background: colorScheme === 'dark' ? 'linear-gradient(160deg, rgba(37,99,235,0.45), rgba(76,29,149,0.35))' : 'linear-gradient(160deg, rgba(37,99,235,0.28), rgba(76,29,149,0.2))', border: '1px solid rgba(125,146,190,0.45)' }}>
+                <img src="/logo.svg" alt="PingComp" width={30} height={30} />
+              </Box>
               <Stack gap={0}>
-                <Title order={2} fw={800}>{t.title}</Title>
+                <Title order={2} fw={900} style={{ letterSpacing: 0.2 }}>{t.title}</Title>
                 <Text size="sm" c="dimmed">{t.subtitle}</Text>
               </Stack>
             </Group>
             <Group>
-              <Select w={110} data={[{ value: 'zh', label: '中文' }, { value: 'en', label: 'EN' }]} value={lang} onChange={(v) => setLang((v as 'zh' | 'en') || 'zh')} leftSection={<IconWorld size={14} />} />
-              <Select
-                w={145}
-                data={[{ value: 'auto', label: 'system' }, { value: 'dark', label: 'dark' }, { value: 'light', label: 'light' }]}
-                value={colorScheme === 'auto' ? 'auto' : colorScheme}
-                onChange={(v) => setColorScheme((v as any) || 'auto')}
-                leftSection={colorScheme === 'light' ? <IconSun size={14} /> : <IconMoonStars size={14} />}
-              />
+              <Menu shadow="md" width={150} position="bottom-end">
+                <Menu.Target>
+                  <ActionIcon variant="light" size="lg" aria-label="language"><IconWorld size={16} /></ActionIcon>
+                </Menu.Target>
+                <Menu.Dropdown>
+                  <Menu.Item onClick={() => setLang('zh')}>中文</Menu.Item>
+                  <Menu.Item onClick={() => setLang('en')}>English</Menu.Item>
+                </Menu.Dropdown>
+              </Menu>
+              <Menu shadow="md" width={180} position="bottom-end">
+                <Menu.Target>
+                  <ActionIcon variant="light" size="lg" aria-label="theme">{colorScheme === 'light' ? <IconSun size={16} /> : <IconMoonStars size={16} />}</ActionIcon>
+                </Menu.Target>
+                <Menu.Dropdown>
+                  <Menu.Item leftSection={<IconSun size={14} />} onClick={() => setColorScheme('light')}>Light</Menu.Item>
+                  <Menu.Item leftSection={<IconMoonStars size={14} />} onClick={() => setColorScheme('dark')}>Dark</Menu.Item>
+                  <Menu.Item leftSection={<IconWorld size={14} />} onClick={() => setColorScheme('auto')}>System</Menu.Item>
+                </Menu.Dropdown>
+              </Menu>
               {me ? (
                 <Group gap={8}>
                   <Avatar src={me.picture} size={24} radius="xl" />
@@ -703,7 +719,6 @@ export function App() {
                   <Button component="a" href="/logout" variant="subtle" size="xs">{t.logout}</Button>
                 </Group>
               ) : null}
-              <Button component="a" href="/api/export.csv" variant="light">{t.exportCsv}</Button>
             </Group>
           </Group>
         </Paper>
@@ -789,34 +804,42 @@ export function App() {
           <Tabs.Panel value="leads" pt="md">
             <Box px="xs">
               <Paper withBorder p="md" radius="md" style={{ borderColor: colorScheme === 'dark' ? 'rgba(120,140,180,0.35)' : undefined }}>
-                <Group wrap="wrap" align="end">
-                  <TextInput leftSection={<IconFilter size={14} />} w={320} placeholder={t.search} value={q} onChange={(e) => setQ(e.currentTarget.value)} />
-                  <Box w={220}>
-                    <Text size="xs" c="dimmed" mb={4}>{t.minScore}: {minScore}</Text>
-                    <Slider value={minScore} onChange={setMinScore} min={0} max={100} step={1} />
-                  </Box>
-                  <Select w={170} placeholder={t.status} data={statusOptions} value={status} onChange={setStatus} clearable />
-                  <Select w={210} placeholder={t.region} data={regionOptions} value={region} onChange={setRegion} searchable clearable searchValue={regionSearch} onSearchChange={setRegionSearch} rightSection={regionLoading ? <Text size="xs" c="dimmed">...</Text> : null} />
-                  <Select w={160} data={[{ value: '0', label: 'All' }, { value: '1', label: t.lockOnly }]} value={lockedOnly ? '1' : '0'} onChange={(v) => setLockedOnly(v === '1')} />
-                  <Button variant="default" onClick={() => { setQ(''); setMinScore(0); setStatus(null); setRegion(null); setLockedOnly(false); setPage(1); }}>{t.reset}</Button>
+                <Group wrap="wrap" align="end" justify="space-between">
+                  <Group wrap="wrap" align="end">
+                    <TextInput leftSection={<IconFilter size={14} />} w={320} placeholder={t.search} value={q} onChange={(e) => setQ(e.currentTarget.value)} />
+                    <Select w={170} placeholder={t.status} data={statusOptions} value={status} onChange={setStatus} clearable />
+                    <Select w={210} placeholder={t.region} data={regionOptions} value={region} onChange={setRegion} searchable clearable searchValue={regionSearch} onSearchChange={setRegionSearch} rightSection={regionLoading ? <Text size="xs" c="dimmed">...</Text> : null} />
+                    <Button variant="default" onClick={() => setShowMoreFilters(v => !v)}>{showMoreFilters ? 'Less' : 'More'}</Button>
+                    <Button variant="subtle" onClick={() => { setQ(''); setMinScore(0); setStatus(null); setRegion(null); setLockedOnly(false); setPage(1); setShowMoreFilters(false); }}>{t.reset}</Button>
+                  </Group>
+                  <Button component="a" href="/api/export.csv" variant="light" leftSection={<IconDownload size={14} />}>{t.exportCsv}</Button>
                 </Group>
 
-                <Group mt="sm" mb={2} justify="space-between" wrap="wrap">
-                  <Group gap={6}>
-                    <Text size="xs" c="dimmed">{t.quickViews}</Text>
-                    <Button size="compact-xs" variant="default" onClick={() => applyQuickView('high')}>High Potential</Button>
-                    <Button size="compact-xs" variant="default" onClick={() => applyQuickView('locked')}>Locked</Button>
-                    <Button size="compact-xs" variant="default" onClick={() => applyQuickView('followup')}>Follow-up</Button>
-                    <Button size="compact-xs" variant="subtle" onClick={() => applyQuickView('all')}>All</Button>
+                <Collapse in={showMoreFilters}>
+                  <Group mt="sm" mb={2} justify="space-between" wrap="wrap">
+                    <Group gap={10} align="end">
+                      <Box w={220}>
+                        <Text size="xs" c="dimmed" mb={4}>{t.minScore}: {minScore}</Text>
+                        <Slider value={minScore} onChange={setMinScore} min={0} max={100} step={1} />
+                      </Box>
+                      <Select w={160} data={[{ value: '0', label: 'All' }, { value: '1', label: t.lockOnly }]} value={lockedOnly ? '1' : '0'} onChange={(v) => setLockedOnly(v === '1')} />
+                    </Group>
+                    <Group gap={6}>
+                      <Text size="xs" c="dimmed">{t.quickViews}</Text>
+                      <Button size="compact-xs" variant="default" onClick={() => applyQuickView('high')}>High Potential</Button>
+                      <Button size="compact-xs" variant="default" onClick={() => applyQuickView('locked')}>Locked</Button>
+                      <Button size="compact-xs" variant="default" onClick={() => applyQuickView('followup')}>Follow-up</Button>
+                      <Button size="compact-xs" variant="subtle" onClick={() => applyQuickView('all')}>All</Button>
+                    </Group>
+                    <Group gap={6}>
+                      <Text size="xs" c="dimmed">{t.savedViews}</Text>
+                      <Select w={180} placeholder={t.savedViews} data={savedViews.map(v => ({ value: v.name, label: v.name }))} value={selectedSavedView} onChange={applySavedView} clearable />
+                      <TextInput w={140} placeholder={t.viewName} value={newViewName} onChange={(e) => setNewViewName(e.currentTarget.value)} />
+                      <Button size="compact-xs" variant="default" onClick={saveCurrentView}>{t.saveView}</Button>
+                      <Button size="compact-xs" variant="subtle" disabled={!selectedSavedView} onClick={deleteSavedView}>{t.deleteView}</Button>
+                    </Group>
                   </Group>
-                  <Group gap={6}>
-                    <Text size="xs" c="dimmed">{t.savedViews}</Text>
-                    <Select w={180} placeholder={t.savedViews} data={savedViews.map(v => ({ value: v.name, label: v.name }))} value={selectedSavedView} onChange={applySavedView} clearable />
-                    <TextInput w={140} placeholder={t.viewName} value={newViewName} onChange={(e) => setNewViewName(e.currentTarget.value)} />
-                    <Button size="compact-xs" variant="default" onClick={saveCurrentView}>{t.saveView}</Button>
-                    <Button size="compact-xs" variant="subtle" disabled={!selectedSavedView} onClick={deleteSavedView}>{t.deleteView}</Button>
-                  </Group>
-                </Group>
+                </Collapse>
 
                 <Group mt="sm" justify="space-between" wrap="wrap">
                   <Text size="sm" c="dimmed">{t.total}: {totalRows} · {t.page}: {page}/{totalPages}{loading ? ' · loading…' : ''}</Text>
@@ -1130,9 +1153,9 @@ export function App() {
       <Group justify="center" mt="md" mb="xs">
         <Text size="xs" c="dimmed">
           Powered by{' '}
-          <Anchor href="https://tidbcloud.com" target="_blank" rel="noreferrer" underline="hover" c="blue.4">TiDB Cloud</Anchor>
+          <Anchor href="https://tidbcloud.com" target="_blank" rel="noreferrer" underline="hover" style={{ color: 'var(--mantine-color-blue-4)' }}>TiDB Cloud</Anchor>
           {' '} &amp; {' '}
-          <Anchor href="https://openclaw.ai" target="_blank" rel="noreferrer" underline="hover" c="violet.4">OpenClaw</Anchor>
+          <Anchor href="https://openclaw.ai" target="_blank" rel="noreferrer" underline="hover" style={{ color: 'var(--mantine-color-violet-4)' }}>OpenClaw</Anchor>
         </Text>
       </Group>
 
