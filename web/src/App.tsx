@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActionIcon, Anchor, AppShell, Avatar, Badge, Box, Button, Card, Checkbox, Collapse, Divider, Group, Menu, Modal, NumberInput, Paper, ScrollArea, Select, Slider,
-  SimpleGrid, Stack, Table, Tabs, Text, TextInput, Textarea, Title, Tooltip, useMantineColorScheme,
+  SimpleGrid, Stack, Table, Tabs, Text, TextInput, Textarea, Title, Tooltip, useComputedColorScheme, useMantineColorScheme,
 } from '@mantine/core';
 import { IconActivity, IconArrowDown, IconArrowUp, IconBolt, IconBrain, IconEdit, IconFilter, IconGauge, IconLock, IconMessageCircle, IconMoonStars, IconSend, IconSun, IconTrash, IconWorld, IconNotes, IconDownload } from '@tabler/icons-react';
 
@@ -193,6 +193,7 @@ function HorizontalBars({ rows }: { rows: Array<{ k: string; v: number }> }) {
 
 export function App() {
   const { colorScheme, setColorScheme } = useMantineColorScheme();
+  const computedColorScheme = useComputedColorScheme('light', { getInitialValueInEffect: false });
   const { lang, setLang } = useLocalLang();
   const t = I18N[lang];
 
@@ -659,7 +660,7 @@ export function App() {
     else { setSortKey(k); setSortDir('desc'); }
   };
 
-  const isDark = colorScheme === 'dark';
+  const isDark = computedColorScheme === 'dark';
   const geek = {
     border: isDark ? 'rgba(120,140,180,0.35)' : 'rgba(130,150,190,0.22)',
     panelBg: isDark ? 'linear-gradient(180deg, rgba(15,23,42,0.62), rgba(17,24,39,0.58))' : 'linear-gradient(180deg, rgba(255,255,255,0.95), rgba(248,250,252,0.92))',
@@ -689,11 +690,11 @@ export function App() {
     <AppShell padding="md">
       <style>{`@keyframes pcPulseGradient { 0% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } 100% { background-position: 0% 50%; } }`}</style>
       <Stack gap="md">
-        <Paper withBorder p="md" radius="md" style={{ position: 'relative', overflow: 'hidden', backdropFilter: 'blur(8px)', boxShadow: '0 0 40px rgba(64,128,255,0.08) inset', borderColor: colorScheme === 'dark' ? 'rgba(120,140,180,0.45)' : undefined }}>
-          <Box style={{ position: 'absolute', inset: 0, background: colorScheme === 'dark' ? 'linear-gradient(120deg, rgba(59,130,246,0.12), rgba(139,92,246,0.1), rgba(16,185,129,0.08))' : 'linear-gradient(120deg, rgba(59,130,246,0.08), rgba(139,92,246,0.07), rgba(16,185,129,0.06))', backgroundSize: '200% 200%', animation: 'pcPulseGradient 16s ease infinite', pointerEvents: 'none' }} />
+        <Paper withBorder p="md" radius="md" style={{ position: 'relative', overflow: 'hidden', backdropFilter: 'blur(8px)', boxShadow: '0 0 40px rgba(64,128,255,0.08) inset', borderColor: computedColorScheme === 'dark' ? 'rgba(120,140,180,0.45)' : undefined }}>
+          <Box style={{ position: 'absolute', inset: 0, background: computedColorScheme === 'dark' ? 'linear-gradient(120deg, rgba(59,130,246,0.12), rgba(139,92,246,0.1), rgba(16,185,129,0.08))' : 'linear-gradient(120deg, rgba(59,130,246,0.08), rgba(139,92,246,0.07), rgba(16,185,129,0.06))', backgroundSize: '200% 200%', animation: 'pcPulseGradient 16s ease infinite', pointerEvents: 'none' }} />
           <Group justify="space-between" align="center" style={{ position: 'relative' }}>
             <Group gap={10}>
-              <Box style={{ width: 46, height: 46, borderRadius: 12, display: 'grid', placeItems: 'center', background: colorScheme === 'dark' ? 'linear-gradient(160deg, rgba(37,99,235,0.45), rgba(76,29,149,0.35))' : 'linear-gradient(160deg, rgba(37,99,235,0.28), rgba(76,29,149,0.2))', border: '1px solid rgba(125,146,190,0.45)' }}>
+              <Box style={{ width: 46, height: 46, borderRadius: 12, display: 'grid', placeItems: 'center', background: computedColorScheme === 'dark' ? 'linear-gradient(160deg, rgba(37,99,235,0.45), rgba(76,29,149,0.35))' : 'linear-gradient(160deg, rgba(37,99,235,0.28), rgba(76,29,149,0.2))', border: '1px solid rgba(125,146,190,0.45)' }}>
                 <img src="/logo.svg" alt="PingComp" width={30} height={30} />
               </Box>
               <Stack gap={0}>
@@ -713,7 +714,7 @@ export function App() {
               </Menu>
               <Menu shadow="md" width={180} position="bottom-end">
                 <Menu.Target>
-                  <ActionIcon variant="light" size="lg" aria-label="theme">{colorScheme === 'light' ? <IconSun size={16} /> : <IconMoonStars size={16} />}</ActionIcon>
+                  <ActionIcon variant="light" size="lg" aria-label="theme">{computedColorScheme === 'light' ? <IconSun size={16} /> : <IconMoonStars size={16} />}</ActionIcon>
                 </Menu.Target>
                 <Menu.Dropdown>
                   <Menu.Item leftSection={<IconSun size={14} />} onClick={() => setColorScheme('light')}>Light</Menu.Item>
@@ -760,7 +761,7 @@ export function App() {
                   <ScrollArea style={{ flex: 1 }} offsetScrollbars scrollbarSize={10}>
                     <Stack gap="sm" pr="sm">
                       {agentTurns.map((t0, i) => (
-                        <Paper key={i} p="sm" radius="md" withBorder style={{ alignSelf: t0.role === 'user' ? 'flex-end' : 'flex-start', maxWidth: '86%', background: t0.role === 'user' ? (colorScheme === 'dark' ? 'rgba(59,130,246,.22)' : 'rgba(59,130,246,.12)') : undefined }}>
+                        <Paper key={i} p="sm" radius="md" withBorder style={{ alignSelf: t0.role === 'user' ? 'flex-end' : 'flex-start', maxWidth: '86%', background: t0.role === 'user' ? (computedColorScheme === 'dark' ? 'rgba(59,130,246,.22)' : 'rgba(59,130,246,.12)') : undefined }}>
                           <Text size="sm">{t0.text}</Text>
                           {t0.chart ? (
                             <Paper mt="xs" p="sm" withBorder radius="sm">
