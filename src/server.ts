@@ -3,6 +3,7 @@ import dotenv from 'dotenv';
 import { auth } from 'express-openid-connect';
 import { getConn, migrate, TABLE } from './db.js';
 import { htmlToPlain } from './utils/htmlToPlain.js';
+import { getSendGridConfigError, isSendGridEnabled, sendViaSendGrid } from './services/sendgrid.js';
 
 dotenv.config();
 const app = express();
@@ -166,6 +167,7 @@ app.get('/logout', (req: Request, res: Response) => {
 
 app.use('/api', (req: Request, res: Response, next: NextFunction) => {
   if (req.path === '/health') return next();
+  if (req.path === '/outreach/sendgrid/events') return next();
   return ensureAuth(req, res, next);
 });
 
@@ -778,9 +780,47 @@ app.post('/api/outreach/email-sends', async (req: Request, res: Response) => {
   const content = b.content == null ? null : String(b.content || '');
   const actor = getActor(req);
   const sender = String(b.sender || actor).trim() || null;
+  const campaignId = b.campaignId == null ? null : String(b.campaignId || '').trim() || null;
+  const variant = b.variant == null ? null : String(b.variant || '').trim() || null;
+  const forceProvider = String(b.provider || '').trim().toLowerCase();
 
   if (!Number.isFinite(leadId) || leadId <= 0) return res.status(400).json({ ok: false, error: 'invalid leadId' });
   if (!email) return res.status(400).json({ ok: false, error: 'missing email' });
+
+  const shouldUseSendGrid = forceProvider === 'sendgrid' || String(process.env.OUTREACH_REAL_SEND || '').toLowerCase() === 'true';
+
+  let provider: string | null = null;
+  let providerMessageId: string | null = null;
+  let status: string | null = null;
+  let errorMessage: string | null = null;
+
+  if (shouldUseSendGrid) {
+    if (!isSendGridEnabled()) {
+      return res.status(400).json({ ok: false, error: 'sendgrid not enabled (set SENDGRID_ENABLED=true)' });
+    }
+    const configError = getSendGridConfigError();
+    if (configError) return res.status(400).json({ ok: false, error: configError });
+
+    try {
+      const sendResult = await sendViaSendGrid({
+        to: email,
+        subject,
+        content,
+        customArgs: {
+          leadId: String(leadId),
+          campaignId: campaignId || '',
+          variant: variant || '',
+        },
+      });
+      provider = sendResult.provider;
+      providerMessageId = sendResult.providerMessageId;
+      status = sendResult.status;
+    } catch (err: any) {
+      provider = 'sendgrid';
+      status = 'failed';
+      errorMessage = String(err?.message || 'sendgrid send failed');
+    }
+  }
 
   const conn = await getConn();
   try {
@@ -788,20 +828,104 @@ app.post('/api/outreach/email-sends', async (req: Request, res: Response) => {
     const sentAt = b.sentAt ? new Date(String(b.sentAt)) : null;
     const hasSentAt = sentAt && !Number.isNaN(sentAt.getTime());
 
+    const sqlWithSentAt = `INSERT INTO outreach_email_sends (lead_id, email, sent_at, subject, content, sender, provider, provider_message_id, status, error_message, campaign_id, variant) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+    const argsWithSentAt = [
+      leadId,
+      email,
+      sentAt?.toISOString().slice(0, 19).replace('T', ' '),
+      subject,
+      content,
+      sender,
+      provider,
+      providerMessageId,
+      status,
+      errorMessage,
+      campaignId,
+      variant,
+    ];
+
+    const sqlNoSentAt = `INSERT INTO outreach_email_sends (lead_id, email, subject, content, sender, provider, provider_message_id, status, error_message, campaign_id, variant) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+    const argsNoSentAt = [
+      leadId,
+      email,
+      subject,
+      content,
+      sender,
+      provider,
+      providerMessageId,
+      status,
+      errorMessage,
+      campaignId,
+      variant,
+    ];
+
     if (hasSentAt) {
-      await conn.execute(
-        'INSERT INTO outreach_email_sends (lead_id, email, sent_at, subject, content, sender) VALUES (?, ?, ?, ?, ?, ?)',
-        [leadId, email, sentAt.toISOString().slice(0, 19).replace('T', ' '), subject, content, sender]
-      );
+      await conn.execute(sqlWithSentAt, argsWithSentAt);
     } else {
-      await conn.execute(
-        'INSERT INTO outreach_email_sends (lead_id, email, subject, content, sender) VALUES (?, ?, ?, ?, ?)',
-        [leadId, email, subject, content, sender]
-      );
+      await conn.execute(sqlNoSentAt, argsNoSentAt);
     }
 
     const [rows]: any = await conn.query('SELECT * FROM outreach_email_sends WHERE lead_id=? AND email=? ORDER BY id DESC LIMIT 1', [leadId, email]);
-    return res.json({ ok: true, row: rows?.[0] || null });
+    const row = rows?.[0] || null;
+
+    if (shouldUseSendGrid && status === 'failed') {
+      return res.status(502).json({ ok: false, error: errorMessage || 'send failed', row });
+    }
+
+    return res.json({ ok: true, row, send: shouldUseSendGrid ? { provider, providerMessageId, status } : null });
+  } finally {
+    await conn.end();
+  }
+});
+
+app.post('/api/outreach/sendgrid/events', async (req: Request, res: Response) => {
+  const verificationKey = String(process.env.SENDGRID_EVENT_WEBHOOK_KEY || '').trim();
+  if (verificationKey) {
+    const key = String(req.headers['x-sendgrid-key'] || '').trim();
+    if (key !== verificationKey) return res.status(401).json({ ok: false, error: 'unauthorized' });
+  }
+
+  const events = Array.isArray(req.body) ? req.body : [];
+  if (!events.length) return res.json({ ok: true, updated: 0 });
+
+  const conn = await getConn();
+  try {
+    let updated = 0;
+    for (const e of events) {
+      const event = String(e?.event || '').trim().toLowerCase();
+      const sgMessageIdRaw = String(e?.sg_message_id || e?.sg_messageid || '').trim();
+      const providerMessageId = sgMessageIdRaw.split('.')[0] || sgMessageIdRaw;
+      const email = String(e?.email || '').trim().toLowerCase();
+
+      if (!providerMessageId && !email) continue;
+
+      let nextStatus = '';
+      if (event === 'processed' || event === 'deferred') nextStatus = 'queued';
+      else if (event === 'delivered') nextStatus = 'delivered';
+      else if (event === 'open') nextStatus = 'opened';
+      else if (event === 'click') nextStatus = 'clicked';
+      else if (event === 'bounce' || event === 'dropped' || event === 'spamreport') nextStatus = 'bounced';
+      else if (event === 'unsubscribe' || event === 'group_unsubscribe') nextStatus = 'unsubscribed';
+      else continue;
+
+      const msg = String(e?.reason || e?.response || e?.status || '').slice(0, 1000) || null;
+
+      if (providerMessageId) {
+        const [ret]: any = await conn.execute(
+          'UPDATE outreach_email_sends SET status=?, error_message=COALESCE(?, error_message), updated_at=NOW() WHERE provider=? AND provider_message_id=?',
+          [nextStatus, msg, 'sendgrid', providerMessageId]
+        );
+        updated += Number(ret?.affectedRows || 0);
+      } else {
+        const [ret]: any = await conn.execute(
+          'UPDATE outreach_email_sends SET status=?, error_message=COALESCE(?, error_message), updated_at=NOW() WHERE provider=? AND email=? ORDER BY id DESC LIMIT 1',
+          [nextStatus, msg, 'sendgrid', email]
+        );
+        updated += Number(ret?.affectedRows || 0);
+      }
+    }
+
+    return res.json({ ok: true, updated });
   } finally {
     await conn.end();
   }

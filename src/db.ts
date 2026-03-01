@@ -81,12 +81,29 @@ export async function migrate() {
         subject VARCHAR(255) NULL,
         content TEXT NULL,
         sender VARCHAR(128) NULL,
+        provider VARCHAR(32) NULL,
+        provider_message_id VARCHAR(255) NULL,
+        status VARCHAR(32) NULL,
+        error_message TEXT NULL,
+        campaign_id VARCHAR(64) NULL,
+        variant VARCHAR(32) NULL,
         created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
         PRIMARY KEY (id),
         KEY idx_lead_sent_at (lead_id, sent_at),
-        KEY idx_email_sent_at (email, sent_at)
+        KEY idx_email_sent_at (email, sent_at),
+        KEY idx_provider_msg (provider, provider_message_id),
+        KEY idx_campaign_variant (campaign_id, variant)
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
     `);
+
+    await addColumn(conn, 'ALTER TABLE outreach_email_sends ADD COLUMN provider VARCHAR(32) NULL');
+    await addColumn(conn, 'ALTER TABLE outreach_email_sends ADD COLUMN provider_message_id VARCHAR(255) NULL');
+    await addColumn(conn, 'ALTER TABLE outreach_email_sends ADD COLUMN status VARCHAR(32) NULL');
+    await addColumn(conn, 'ALTER TABLE outreach_email_sends ADD COLUMN error_message TEXT NULL');
+    await addColumn(conn, 'ALTER TABLE outreach_email_sends ADD COLUMN campaign_id VARCHAR(64) NULL');
+    await addColumn(conn, 'ALTER TABLE outreach_email_sends ADD COLUMN variant VARCHAR(32) NULL');
+    await addColumn(conn, 'ALTER TABLE outreach_email_sends ADD COLUMN updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP');
 
     // Interviews v1 (Customer interview records)
     await conn.query(`
