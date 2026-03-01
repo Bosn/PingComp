@@ -969,7 +969,42 @@ app.get('/api/outreach/email-sends', async (req: Request, res: Response) => {
   const conn = await getConn();
   try {
     const [rows]: any = await conn.query(`SELECT * FROM outreach_email_sends ${where} ORDER BY sent_at DESC, id DESC LIMIT ?`, [...args, limit]);
-    return res.json({ ok: true, rows });
+
+    const list = Array.isArray(rows) ? rows : [];
+    const grouped = new Map<string, string[]>();
+    for (const r of list) {
+      const k = [
+        String(r.lead_id || ''),
+        String(r.campaign_id || ''),
+        String(r.variant || ''),
+        String(r.subject || ''),
+        String(r.sender || ''),
+        String(r.sent_at || '').slice(0, 19),
+      ].join('||');
+      const arr = grouped.get(k) || [];
+      const email1 = String(r.email || '').trim().toLowerCase();
+      if (email1 && !arr.includes(email1)) arr.push(email1);
+      grouped.set(k, arr);
+    }
+
+    const enhanced = list.map((r: any) => {
+      const k = [
+        String(r.lead_id || ''),
+        String(r.campaign_id || ''),
+        String(r.variant || ''),
+        String(r.subject || ''),
+        String(r.sender || ''),
+        String(r.sent_at || '').slice(0, 19),
+      ].join('||');
+      const recipients = grouped.get(k) || [];
+      return {
+        ...r,
+        batch_recipients: recipients,
+        batch_recipient_count: recipients.length,
+      };
+    });
+
+    return res.json({ ok: true, rows: enhanced });
   } finally {
     await conn.end();
   }

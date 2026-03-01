@@ -55,6 +55,8 @@ type OutreachEmailSend = {
   subject?: string | null;
   sender?: string | null;
   content?: string | null;
+  batch_recipients?: string[];
+  batch_recipient_count?: number;
 };
 
 type ChartPayload = { type: 'pie' | 'line' | 'bar'; title?: string; labels: string[]; values: number[] };
@@ -924,7 +926,7 @@ export function App() {
                   <TextInput w={140} label={(t as any).from || 'From'} placeholder="YYYY-MM-DD" value={outreachFrom} onChange={(e) => setOutreachFrom(e.currentTarget.value)} />
                   <TextInput w={140} label={(t as any).to || 'To'} placeholder="YYYY-MM-DD" value={outreachTo} onChange={(e) => setOutreachTo(e.currentTarget.value)} />
                   <Button variant="default" leftSection={<IconFilter size={14} />} loading={outreachLoading} onClick={() => { setOutreachExpanded(new Set()); loadOutreachSends(); }}>{(t as any).apply || 'Apply'}</Button>
-                  <Button variant="subtle" onClick={() => { setOutreachLeadId(''); setOutreachEmail(''); setOutreachFrom(''); setOutreachTo(''); setOutreachExpanded(new Set()); }}>{(t as any).reset || 'Reset'}</Button>
+                  <Button variant="subtle" onClick={() => { setOutreachLeadId(''); setOutreachEmail(''); setOutreachFrom(''); setOutreachTo(''); setOutreachExpanded(new Set()); setTimeout(() => loadOutreachSends(), 0); }}>{(t as any).reset || 'Reset'}</Button>
                 </Group>
 
                 <Divider my="sm" />
@@ -952,7 +954,15 @@ export function App() {
                         return (
                           <Table.Tr key={key}>
                             <Table.Td>{r0.lead_id}</Table.Td>
-                            <Table.Td style={{ maxWidth: 260 }}><Tooltip withArrow label={r0.email}><Text lineClamp={1}>{r0.email}</Text></Tooltip></Table.Td>
+                            <Table.Td style={{ maxWidth: 320 }}>
+                              {(() => {
+                                const recipients = Array.isArray((r0 as any).batch_recipients) ? (r0 as any).batch_recipients as string[] : [r0.email];
+                                const count = Number((r0 as any).batch_recipient_count || recipients.length || 1);
+                                const label = recipients.join(', ');
+                                const text = count > 1 ? `${r0.email} (+${count - 1} more)` : r0.email;
+                                return <Tooltip withArrow multiline w={560} label={label || r0.email}><Text lineClamp={1}>{text}</Text></Tooltip>;
+                              })()}
+                            </Table.Td>
                             <Table.Td style={{ whiteSpace: 'nowrap' }}>{(r0.sent_at || '').replace('T', ' ').slice(0, 19)}</Table.Td>
                             <Table.Td style={{ maxWidth: 320 }}><Tooltip multiline w={560} withArrow label={r0.subject || '-'}><Text fw={600} lineClamp={1}>{r0.subject || '-'}</Text></Tooltip></Table.Td>
                             <Table.Td style={{ maxWidth: 200 }}><Text size="xs" c="dimmed" lineClamp={1}>{r0.sender || '-'}</Text></Table.Td>
