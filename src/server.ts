@@ -184,6 +184,23 @@ function getActor(req: Request): string {
   return email || 'pingcomp-react';
 }
 
+function normalizeEmails(input: any): string[] {
+  const raw = Array.isArray(input) ? input.join(',') : String(input ?? '');
+  const parts = raw
+    .split(/[\n,;]+/g)
+    .map(s => String(s).trim().toLowerCase())
+    .filter(Boolean);
+
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const p of parts) {
+    if (seen.has(p)) continue;
+    seen.add(p);
+    out.push(p);
+  }
+  return out;
+}
+
 // -------- API --------
 
 // Interviews v1 (M2 scaffold + core create/update/read/delete)
@@ -641,6 +658,48 @@ app.get('/api/leads/:id', async (req: Request, res: Response) => {
   res.json(rows[0]);
 });
 
+app.get('/api/leads/:id/emails', async (req: Request, res: Response) => {
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id) || id <= 0) return res.status(400).json({ ok: false, error: 'invalid id' });
+
+  const conn = await getConn();
+  const [rows]: any = await conn.query('SELECT emails FROM `' + TABLE + '` WHERE id=?', [id]);
+  await conn.end();
+  if (!rows?.[0]) return res.status(404).json({ ok: false, error: 'not found' });
+
+  const raw = String(rows?.[0]?.emails || '');
+  const emails = normalizeEmails(raw);
+  return res.json({ ok: true, id, emails, raw });
+});
+
+app.put('/api/leads/:id/emails', async (req: Request, res: Response) => {
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id) || id <= 0) return res.status(400).json({ ok: false, error: 'invalid id' });
+
+  const b: any = req.body || {};
+  const nextEmails = normalizeEmails(b.emails ?? b.value ?? b);
+  const nextRaw = nextEmails.length ? nextEmails.join(',') : null;
+  const actor = getActor(req);
+
+  const conn = await getConn();
+  try {
+    const [beforeRows]: any = await conn.query('SELECT emails FROM `' + TABLE + '` WHERE id=?', [id]);
+    const before = beforeRows?.[0] || null;
+    if (!before) return res.status(404).json({ ok: false, error: 'not found' });
+
+    await conn.execute('UPDATE `' + TABLE + '` SET emails=?, updated_at=NOW(), manual_updated_at=NOW(), manual_locked=1 WHERE id=?', [nextRaw, id]);
+
+    await logActivity(conn, id, 'api_emails_update', actor, before, { emails: nextRaw });
+
+    const [afterRows]: any = await conn.query('SELECT emails FROM `' + TABLE + '` WHERE id=?', [id]);
+    const raw = String(afterRows?.[0]?.emails || '');
+    const emails = normalizeEmails(raw);
+    return res.json({ ok: true, id, emails, raw });
+  } finally {
+    await conn.end();
+  }
+});
+
 app.put('/api/leads/:id', async (req: Request, res: Response) => {
   const b: any = req.body || {};
   const conn = await getConn();
@@ -710,6 +769,87 @@ app.delete('/api/leads/:id', async (req: Request, res: Response) => {
 });
 
 
+
+app.post('/api/outreach/email-sends', async (req: Request, res: Response) => {
+  const b: any = req.body || {};
+  const leadId = Number(b.leadId);
+  const email = String(b.email || '').trim().toLowerCase();
+  const subject = b.subject == null ? null : String(b.subject || '').trim();
+  const content = b.content == null ? null : String(b.content || '');
+  const actor = getActor(req);
+  const sender = String(b.sender || actor).trim() || null;
+
+  if (!Number.isFinite(leadId) || leadId <= 0) return res.status(400).json({ ok: false, error: 'invalid leadId' });
+  if (!email) return res.status(400).json({ ok: false, error: 'missing email' });
+
+  const conn = await getConn();
+  try {
+    // Optional sentAt for backfill/testing; otherwise DB default CURRENT_TIMESTAMP.
+    const sentAt = b.sentAt ? new Date(String(b.sentAt)) : null;
+    const hasSentAt = sentAt && !Number.isNaN(sentAt.getTime());
+
+    if (hasSentAt) {
+      await conn.execute(
+        'INSERT INTO outreach_email_sends (lead_id, email, sent_at, subject, content, sender) VALUES (?, ?, ?, ?, ?, ?)',
+        [leadId, email, sentAt.toISOString().slice(0, 19).replace('T', ' '), subject, content, sender]
+      );
+    } else {
+      await conn.execute(
+        'INSERT INTO outreach_email_sends (lead_id, email, subject, content, sender) VALUES (?, ?, ?, ?, ?)',
+        [leadId, email, subject, content, sender]
+      );
+    }
+
+    const [rows]: any = await conn.query('SELECT * FROM outreach_email_sends WHERE lead_id=? AND email=? ORDER BY id DESC LIMIT 1', [leadId, email]);
+    return res.json({ ok: true, row: rows?.[0] || null });
+  } finally {
+    await conn.end();
+  }
+});
+
+app.get('/api/outreach/email-sends', async (req: Request, res: Response) => {
+  const leadId = req.query.leadId == null ? null : Number(req.query.leadId);
+  const email = String(req.query.email || '').trim().toLowerCase();
+  const from = String(req.query.from || '').trim();
+  const to = String(req.query.to || '').trim();
+  const limit = Math.min(500, Math.max(1, Number(req.query.limit || 200)));
+
+  let where = ' WHERE 1=1';
+  const args: any[] = [];
+
+  if (leadId != null) {
+    if (!Number.isFinite(leadId) || leadId <= 0) return res.status(400).json({ ok: false, error: 'invalid leadId' });
+    where += ' AND lead_id=?';
+    args.push(leadId);
+  }
+
+  if (email) {
+    where += ' AND email=?';
+    args.push(email);
+  }
+
+  if (from) {
+    const d = new Date(from);
+    if (Number.isNaN(d.getTime())) return res.status(400).json({ ok: false, error: 'invalid from' });
+    where += ' AND sent_at>=?';
+    args.push(d.toISOString().slice(0, 19).replace('T', ' '));
+  }
+
+  if (to) {
+    const d = new Date(to);
+    if (Number.isNaN(d.getTime())) return res.status(400).json({ ok: false, error: 'invalid to' });
+    where += ' AND sent_at<=?';
+    args.push(d.toISOString().slice(0, 19).replace('T', ' '));
+  }
+
+  const conn = await getConn();
+  try {
+    const [rows]: any = await conn.query(`SELECT * FROM outreach_email_sends ${where} ORDER BY sent_at DESC, id DESC LIMIT ?`, [...args, limit]);
+    return res.json({ ok: true, rows });
+  } finally {
+    await conn.end();
+  }
+});
 
 app.post('/api/agent/chat', async (req: Request, res: Response) => {
   const message = String(req.body?.message || '').trim();
