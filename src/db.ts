@@ -36,6 +36,7 @@ export async function migrate() {
 
     await addColumn(conn, `ALTER TABLE \`${TABLE}\` ADD COLUMN lead_status VARCHAR(32) NOT NULL DEFAULT 'new'`);
     await addColumn(conn, `ALTER TABLE \`${TABLE}\` ADD COLUMN owner VARCHAR(128) NULL`);
+    await addColumn(conn, `ALTER TABLE \`${TABLE}\` ADD COLUMN emails TEXT NULL`);
     await addColumn(conn, `ALTER TABLE \`${TABLE}\` ADD COLUMN tags VARCHAR(512) NULL`);
     await addColumn(conn, `ALTER TABLE \`${TABLE}\` ADD COLUMN source_confidence INT NULL`);
     await addColumn(conn, `ALTER TABLE \`${TABLE}\` ADD COLUMN enrich_status VARCHAR(32) NOT NULL DEFAULT 'pending'`);
@@ -68,6 +69,22 @@ export async function migrate() {
         created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
         PRIMARY KEY (id),
         KEY idx_lead_time (lead_id, created_at)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    `);
+
+    await conn.query(`
+      CREATE TABLE IF NOT EXISTS outreach_email_sends (
+        id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+        lead_id BIGINT UNSIGNED NOT NULL,
+        email VARCHAR(255) NOT NULL,
+        sent_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        subject VARCHAR(255) NULL,
+        content TEXT NULL,
+        sender VARCHAR(128) NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (id),
+        KEY idx_lead_sent_at (lead_id, sent_at),
+        KEY idx_email_sent_at (email, sent_at)
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
     `);
 
