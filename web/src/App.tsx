@@ -208,6 +208,7 @@ export function App() {
   const [regionLoading, setRegionLoading] = useState(false);
   const [lockedOnly, setLockedOnly] = useState<boolean>(false);
   const [showMoreFilters, setShowMoreFilters] = useState<boolean>(false);
+  const [compactMode, setCompactMode] = useState<boolean>(true);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState<string>('15');
   const [totalPages, setTotalPages] = useState(1);
@@ -688,10 +689,10 @@ export function App() {
 
   return (
     <AppShell padding="md">
-      <style>{`@keyframes pcPulseGradient { 0% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } 100% { background-position: 0% 50%; } }`}</style>
-      <Stack gap="md">
+      <style>{`@keyframes pcPulseGradient { 0% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } 100% { background-position: 0% 50%; } } .pc-smooth, .pc-smooth * { transition: background-color 180ms ease, color 180ms ease, border-color 180ms ease, box-shadow 180ms ease; }`}</style>
+      <Stack gap="md" className="pc-smooth">
         <Paper withBorder p="md" radius="md" style={{ position: 'relative', overflow: 'hidden', backdropFilter: 'blur(8px)', boxShadow: '0 0 40px rgba(64,128,255,0.08) inset', borderColor: computedColorScheme === 'dark' ? 'rgba(120,140,180,0.45)' : undefined }}>
-          <Box style={{ position: 'absolute', inset: 0, background: computedColorScheme === 'dark' ? 'linear-gradient(120deg, rgba(59,130,246,0.12), rgba(139,92,246,0.1), rgba(16,185,129,0.08))' : 'linear-gradient(120deg, rgba(59,130,246,0.08), rgba(139,92,246,0.07), rgba(16,185,129,0.06))', backgroundSize: '200% 200%', animation: 'pcPulseGradient 16s ease infinite', pointerEvents: 'none' }} />
+          <Box style={{ position: 'absolute', inset: 0, background: computedColorScheme === 'dark' ? 'linear-gradient(120deg, rgba(59,130,246,0.12), rgba(139,92,246,0.1), rgba(16,185,129,0.08))' : 'linear-gradient(120deg, rgba(59,130,246,0.08), rgba(139,92,246,0.07), rgba(16,185,129,0.06))', backgroundSize: '200% 200%', animation: 'pcPulseGradient 24s ease infinite', pointerEvents: 'none' }} />
           <Group justify="space-between" align="center" style={{ position: 'relative' }}>
             <Group gap={10}>
               <Box style={{ width: 46, height: 46, borderRadius: 12, display: 'grid', placeItems: 'center', background: computedColorScheme === 'dark' ? 'linear-gradient(160deg, rgba(37,99,235,0.45), rgba(76,29,149,0.35))' : 'linear-gradient(160deg, rgba(37,99,235,0.28), rgba(76,29,149,0.2))', border: '1px solid rgba(125,146,190,0.45)' }}>
@@ -880,42 +881,42 @@ export function App() {
                         <Table.Tr><Table.Td colSpan={16}><Text c="dimmed" ta="center" py="md">{loading ? t.loading : t.noData}</Text></Table.Td></Table.Tr>
                       ) : rows.map((r) => (
                         <Table.Tr key={r.id} style={recentEditedIds.has(r.id) ? { background: 'rgba(34,197,94,0.12)', transition: 'background 220ms ease' } : { transition: 'background 220ms ease' }}>
-                          <Table.Td style={{ paddingTop: 10, paddingBottom: 10 }}>
+                          <Table.Td style={{ paddingTop: compactMode ? 6 : 10, paddingBottom: compactMode ? 6 : 10 }}>
                             <Checkbox checked={selectedIds.has(r.id)} onChange={(e) => {
                               const next = new Set(selectedIds);
                               if (e.currentTarget.checked) next.add(r.id); else next.delete(r.id);
                               setSelectedIds(next);
                             }} />
                           </Table.Td>
-                          <Table.Td style={{ paddingTop: 10, paddingBottom: 10 }}>{r.id}</Table.Td>
-                          <Table.Td style={{ paddingTop: 10, paddingBottom: 10, maxWidth: 160 }}>
+                          <Table.Td style={{ paddingTop: compactMode ? 6 : 10, paddingBottom: compactMode ? 6 : 10 }}>{r.id}</Table.Td>
+                          <Table.Td style={{ paddingTop: compactMode ? 6 : 10, paddingBottom: compactMode ? 6 : 10, maxWidth: 160 }}>
                             <Tooltip multiline w={480} withArrow label={r.name || '-'}>
                               <Text fw={600} size="sm" lineClamp={1} style={{ whiteSpace: 'nowrap' }}>{r.name}</Text>
                             </Tooltip>
                           </Table.Td>
-                          <Table.Td style={{ paddingTop: 10, paddingBottom: 10, maxWidth: 160 }}>
+                          <Table.Td style={{ paddingTop: compactMode ? 6 : 10, paddingBottom: compactMode ? 6 : 10, maxWidth: 160 }}>
                             <Tooltip multiline w={480} withArrow label={r.source || '-'}>
                               <Text size="xs" c="dimmed" lineClamp={1} style={{ whiteSpace: 'nowrap' }}>{r.source || '-'}</Text>
                             </Tooltip>
                           </Table.Td>
-                          <Table.Td style={{ paddingTop: 10, paddingBottom: 10 }}>
+                          <Table.Td style={{ paddingTop: compactMode ? 6 : 10, paddingBottom: compactMode ? 6 : 10 }}>
                             {r.tidb_potential_score == null
                               ? '-'
                               : <Badge color={scoreColor(r.tidb_potential_score)} style={{ minWidth: 36, justifyContent: 'center' }}>{r.tidb_potential_score}</Badge>}
                           </Table.Td>
-                          <Table.Td style={{ paddingTop: 10, paddingBottom: 10 }}>{r.lead_status}</Table.Td>
-                          <Table.Td style={{ paddingTop: 10, paddingBottom: 10 }}>{r.owner || '-'}</Table.Td>
-                          <Table.Td style={{ paddingTop: 10, paddingBottom: 10, maxWidth: 240 }}>
+                          <Table.Td style={{ paddingTop: compactMode ? 6 : 10, paddingBottom: compactMode ? 6 : 10 }}>{r.lead_status}</Table.Td>
+                          <Table.Td style={{ paddingTop: compactMode ? 6 : 10, paddingBottom: compactMode ? 6 : 10 }}>{r.owner || '-'}</Table.Td>
+                          <Table.Td style={{ paddingTop: compactMode ? 6 : 10, paddingBottom: compactMode ? 6 : 10, maxWidth: 240 }}>
                             <Tooltip multiline w={480} withArrow label={(String(r.emails || '')).split(',').join(', ') || '-'}>
                               <Text size="xs" c="dimmed" lineClamp={2}>{(String(r.emails || '')).split(',').join(', ') || '-'}</Text>
                             </Tooltip>
                           </Table.Td>
-                          <Table.Td style={{ paddingTop: 10, paddingBottom: 10 }}>{r.manual_locked ? <Tooltip label="LOCKED" withArrow><ActionIcon variant="light" color="violet" size="sm"><IconLock size={13} /></ActionIcon></Tooltip> : '-'}</Table.Td>
-                          <Table.Td style={{ paddingTop: 10, paddingBottom: 10 }}>{r.vertical}</Table.Td>
-                          <Table.Td style={{ paddingTop: 10, paddingBottom: 10 }}>{r.region || '-'}</Table.Td>
-                          <Table.Td style={{ whiteSpace: 'nowrap', paddingTop: 10, paddingBottom: 10 }}>{(r.created_at || '').slice(0, 10)}</Table.Td>
-                          <Table.Td style={{ whiteSpace: 'nowrap', paddingTop: 10, paddingBottom: 10 }}>{(r.updated_at || '').slice(0, 10)}</Table.Td>
-                          <Table.Td style={{ paddingTop: 8, paddingBottom: 8 }}>
+                          <Table.Td style={{ paddingTop: compactMode ? 6 : 10, paddingBottom: compactMode ? 6 : 10 }}>{r.manual_locked ? <Tooltip label="LOCKED" withArrow><ActionIcon variant="light" color="violet" size="sm"><IconLock size={13} /></ActionIcon></Tooltip> : '-'}</Table.Td>
+                          <Table.Td style={{ paddingTop: compactMode ? 6 : 10, paddingBottom: compactMode ? 6 : 10 }}>{r.vertical}</Table.Td>
+                          <Table.Td style={{ paddingTop: compactMode ? 6 : 10, paddingBottom: compactMode ? 6 : 10 }}>{r.region || '-'}</Table.Td>
+                          <Table.Td style={{ whiteSpace: 'nowrap', paddingTop: compactMode ? 6 : 10, paddingBottom: compactMode ? 6 : 10 }}>{(r.created_at || '').slice(0, 10)}</Table.Td>
+                          <Table.Td style={{ whiteSpace: 'nowrap', paddingTop: compactMode ? 6 : 10, paddingBottom: compactMode ? 6 : 10 }}>{(r.updated_at || '').slice(0, 10)}</Table.Td>
+                          <Table.Td style={{ paddingTop: compactMode ? 6 : 8, paddingBottom: compactMode ? 6 : 8 }}>
                             <Group gap={8} wrap="nowrap">
                               <Button variant="light" color="blue" size="xs" leftSection={<IconEdit size={14} />} onClick={() => setSelected({ ...r, emails: (r.emails || '').split(',').map(s => s.trim()).filter(Boolean).join('\n') })}>{t.edit}</Button>
                               <Button variant="light" color="grape" size="xs" leftSection={<IconNotes size={14} />} onClick={() => {
@@ -924,12 +925,12 @@ export function App() {
                               <Button variant="light" color="red" size="xs" leftSection={<IconTrash size={14} />} onClick={() => requestDeleteOne(r.id)}>{t.delete}</Button>
                             </Group>
                           </Table.Td>
-                          <Table.Td style={{ width: 420, minWidth: 420, maxWidth: 420, paddingTop: 10, paddingBottom: 10 }}>
+                          <Table.Td style={{ width: 420, minWidth: 420, maxWidth: 420, paddingTop: compactMode ? 6 : 10, paddingBottom: compactMode ? 6 : 10 }}>
                             <Tooltip multiline w={560} withArrow label={r.tidb_potential_reason || '-'}>
                               <Text size="sm" lineClamp={1}>{r.tidb_potential_reason || ''}</Text>
                             </Tooltip>
                           </Table.Td>
-                          <Table.Td style={{ paddingTop: 10, paddingBottom: 10 }}><Text size="xs" c="dimmed" lineClamp={1}>{r.creator || '-'}</Text></Table.Td>
+                          <Table.Td style={{ paddingTop: compactMode ? 6 : 10, paddingBottom: compactMode ? 6 : 10 }}><Text size="xs" c="dimmed" lineClamp={1}>{r.creator || '-'}</Text></Table.Td>
                         </Table.Tr>
                       ))}
                     </Table.Tbody>
