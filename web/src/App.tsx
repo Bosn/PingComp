@@ -6,7 +6,7 @@ import {
 import { IconActivity, IconArrowDown, IconArrowUp, IconBolt, IconBrain, IconEdit, IconFilter, IconGauge, IconLock, IconMessageCircle, IconMoonStars, IconSend, IconSun, IconTrash, IconWorld, IconNotes, IconDownload } from '@tabler/icons-react';
 
 type Lead = {
-  id: number; name: string; region?: string; vertical: string; source: string;
+  id: number; name: string; region?: string; city?: string; vertical: string; source: string;
   tidb_potential_score: number | null; tidb_potential_reason: string; lead_status: string; owner: string;
   manual_locked: number; creator?: string; created_at?: string; updated_at?: string; funding?: string; linkedin?: string;
   emails?: string | null;
@@ -873,12 +873,12 @@ export function App() {
                         }} /></Table.Th>
                         <SortHead label="ID" k="id" w={64} /><SortHead label="Name" k="name" w={160} /><Table.Th w={160} style={thStyle}>Source</Table.Th><SortHead label="Score" k="score" w={88} /><SortHead label="Status" k="lead_status" /><SortHead label="Owner" k="owner" />
                         <Table.Th w={240} style={thStyle}>{(t as any).emails || 'Emails'}</Table.Th>
-                        <Table.Th w={56} style={thStyle}>Locked</Table.Th><SortHead label="Vertical" k="vertical" /><Table.Th style={thStyle}>Region</Table.Th><SortHead label="CreatedAt" k="created_at" w={122} /><SortHead label="UpdatedAt" k="updated_at" w={122} /><Table.Th w={320} style={thStyle}>Action</Table.Th><Table.Th style={{ ...thStyle, width: 420, minWidth: 420, maxWidth: 420 }}>Reason</Table.Th><Table.Th style={thStyle}>{t.creator}</Table.Th>
+                        <Table.Th w={56} style={thStyle}>Locked</Table.Th><SortHead label="Vertical" k="vertical" /><Table.Th style={thStyle}>Region</Table.Th><Table.Th style={thStyle}>City</Table.Th><SortHead label="CreatedAt" k="created_at" w={122} /><SortHead label="UpdatedAt" k="updated_at" w={122} /><Table.Th w={320} style={thStyle}>Action</Table.Th><Table.Th style={{ ...thStyle, width: 420, minWidth: 420, maxWidth: 420 }}>Reason</Table.Th><Table.Th style={thStyle}>{t.creator}</Table.Th>
                       </Table.Tr>
                     </Table.Thead>
                     <Table.Tbody>
                       {rows.length === 0 ? (
-                        <Table.Tr><Table.Td colSpan={16}><Text c="dimmed" ta="center" py="md">{loading ? t.loading : t.noData}</Text></Table.Td></Table.Tr>
+                        <Table.Tr><Table.Td colSpan={17}><Text c="dimmed" ta="center" py="md">{loading ? t.loading : t.noData}</Text></Table.Td></Table.Tr>
                       ) : rows.map((r) => (
                         <Table.Tr key={r.id} style={recentEditedIds.has(r.id) ? { background: 'rgba(34,197,94,0.12)', transition: 'background 220ms ease' } : { transition: 'background 220ms ease' }}>
                           <Table.Td style={{ paddingTop: compactMode ? 6 : 10, paddingBottom: compactMode ? 6 : 10 }}>
@@ -914,6 +914,7 @@ export function App() {
                           <Table.Td style={{ paddingTop: compactMode ? 6 : 10, paddingBottom: compactMode ? 6 : 10 }}>{r.manual_locked ? <Tooltip label="LOCKED" withArrow><ActionIcon variant="light" color="violet" size="sm"><IconLock size={13} /></ActionIcon></Tooltip> : '-'}</Table.Td>
                           <Table.Td style={{ paddingTop: compactMode ? 6 : 10, paddingBottom: compactMode ? 6 : 10 }}>{r.vertical}</Table.Td>
                           <Table.Td style={{ paddingTop: compactMode ? 6 : 10, paddingBottom: compactMode ? 6 : 10 }}>{r.region || '-'}</Table.Td>
+                          <Table.Td style={{ paddingTop: compactMode ? 6 : 10, paddingBottom: compactMode ? 6 : 10 }}>{r.city || '-'}</Table.Td>
                           <Table.Td style={{ whiteSpace: 'nowrap', paddingTop: compactMode ? 6 : 10, paddingBottom: compactMode ? 6 : 10 }}>{(r.created_at || '').slice(0, 10)}</Table.Td>
                           <Table.Td style={{ whiteSpace: 'nowrap', paddingTop: compactMode ? 6 : 10, paddingBottom: compactMode ? 6 : 10 }}>{(r.updated_at || '').slice(0, 10)}</Table.Td>
                           <Table.Td style={{ paddingTop: compactMode ? 6 : 8, paddingBottom: compactMode ? 6 : 8 }}>
@@ -1175,6 +1176,8 @@ export function App() {
           <Stack>
             <TextInput label="Name" value={selected.name || ''} onChange={(e) => setSelected({ ...selected, name: e.currentTarget.value })} />
             <TextInput label="Vertical" value={selected.vertical || ''} onChange={(e) => setSelected({ ...selected, vertical: e.currentTarget.value })} />
+            <TextInput label="Region" value={selected.region || ''} onChange={(e) => setSelected({ ...selected, region: e.currentTarget.value })} />
+            <TextInput label="City" value={selected.city || ''} onChange={(e) => setSelected({ ...selected, city: e.currentTarget.value })} />
             <Select label="Status" data={statusOptions} value={selected.lead_status} onChange={(v) => setSelected({ ...selected, lead_status: v || 'new' })} />
             <TextInput label="Owner" value={selected.owner || ''} onChange={(e) => setSelected({ ...selected, owner: e.currentTarget.value })} />
             <Textarea label={(t as any).emails || 'Emails'} description="Comma/newline separated. Saved to lead.emails." minRows={3} maxRows={6} autosize value={(selected.emails as any) || ''} onChange={(e) => setSelected({ ...selected, emails: e.currentTarget.value })} />

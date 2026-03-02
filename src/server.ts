@@ -645,7 +645,7 @@ app.get('/api/leads', async (req: Request, res: Response) => {
   const offset = (safePage - 1) * pageSize;
 
   const [rows] = await conn.query(
-    `SELECT id,name,region,vertical,funding,linkedin,emails,latest_news,source,tidb_potential_score,tidb_potential_reason,manual_locked,manual_note,lead_status,owner,creator,tags,source_confidence,enrich_status,created_at,updated_at FROM \`${TABLE}\` ${where} ORDER BY ${orderBy} LIMIT ? OFFSET ?`,
+    `SELECT id,name,region,city,vertical,funding,linkedin,emails,latest_news,source,tidb_potential_score,tidb_potential_reason,manual_locked,manual_note,lead_status,owner,creator,tags,source_confidence,enrich_status,created_at,updated_at FROM \`${TABLE}\` ${where} ORDER BY ${orderBy} LIMIT ? OFFSET ?`,
     [...args, pageSize, offset]
   );
   await conn.end();
@@ -710,12 +710,12 @@ app.put('/api/leads/:id', async (req: Request, res: Response) => {
 
   await conn.execute(
     `UPDATE \`${TABLE}\` SET
-      name=?, region=?, vertical=?, funding=?, linkedin=?, latest_news=?, source=?,
+      name=?, region=?, city=?, vertical=?, funding=?, linkedin=?, latest_news=?, source=?,
       tidb_potential_score=?, tidb_potential_reason=?, manual_note=?, lead_status=?, owner=?, tags=?, source_confidence=?, enrich_status=?,
       manual_locked=1, manual_updated_at=NOW(), updated_at=NOW()
      WHERE id=?`,
     [
-      b.name || '', b.region || '', b.vertical || '', b.funding || '', b.linkedin || '', b.latest_news || '', b.source || '',
+      b.name || '', b.region || '', b.city || '', b.vertical || '', b.funding || '', b.linkedin || '', b.latest_news || '', b.source || '',
       b.tidb_potential_score || null, b.tidb_potential_reason || '', b.manual_note || '', b.lead_status || 'new', b.owner || null,
       b.tags || null, b.source_confidence || null, b.enrich_status || 'pending', req.params.id
     ]
@@ -1115,7 +1115,7 @@ app.post('/api/agent/chat', async (req: Request, res: Response) => {
 
   if (qwenKey) {
     try {
-      const sqlPrompt = `Table: ${TABLE}\nColumns: id,name,region,vertical,funding,linkedin,latest_news,source,tidb_potential_score,tidb_potential_reason,manual_locked,lead_status,owner,tags,source_confidence,enrich_status,created_at,updated_at.\nGenerate ONE read-only SQL SELECT for MySQL to answer the user question.\nConstraints: SELECT only, from ${TABLE} only, no comments, no semicolon, include LIMIT <= 200. Return JSON only: {\"sql\":\"...\"}.`;
+      const sqlPrompt = `Table: ${TABLE}\nColumns: id,name,region,city,vertical,funding,linkedin,latest_news,source,tidb_potential_score,tidb_potential_reason,manual_locked,lead_status,owner,tags,source_confidence,enrich_status,created_at,updated_at.\nGenerate ONE read-only SQL SELECT for MySQL to answer the user question.\nConstraints: SELECT only, from ${TABLE} only, no comments, no semicolon, include LIMIT <= 200. Return JSON only: {\"sql\":\"...\"}.`;
       const sqlText = await runQwen(sqlPrompt, message);
       const m = sqlText.match(/\{[\s\S]*\}/);
       const parsed = m ? JSON.parse(m[0]) : null;
@@ -1162,7 +1162,7 @@ app.post('/api/agent/chat', async (req: Request, res: Response) => {
     }
 
     const [baseRows]: any = await conn.query(
-      `SELECT id,name,region,owner,vertical,lead_status,manual_locked,tidb_potential_score,tidb_potential_reason,updated_at
+      `SELECT id,name,region,city,owner,vertical,lead_status,manual_locked,tidb_potential_score,tidb_potential_reason,updated_at
        FROM \`${TABLE}\`
        ${fallbackWhere}
        ORDER BY IFNULL(tidb_potential_score,0) DESC, updated_at DESC
@@ -1220,13 +1220,13 @@ app.get('/api/export.csv', async (req: Request, res: Response) => {
   if (onlyLocked) { where += ' AND manual_locked=1'; }
   if (status) { where += ' AND lead_status=?'; args.push(status); }
   const [rows]: any = await conn.query(
-    `SELECT name,region,vertical,funding,linkedin,latest_news,source,tidb_potential_score,tidb_potential_reason,lead_status,owner,tags,source_confidence,enrich_status,manual_locked,manual_note,created_at,updated_at FROM \`${TABLE}\` ${where} ORDER BY IFNULL(tidb_potential_score,0) DESC`,
+    `SELECT name,region,city,vertical,funding,linkedin,latest_news,source,tidb_potential_score,tidb_potential_reason,lead_status,owner,tags,source_confidence,enrich_status,manual_locked,manual_note,created_at,updated_at FROM \`${TABLE}\` ${where} ORDER BY IFNULL(tidb_potential_score,0) DESC`,
     args
   );
   await conn.end();
 
   const headers = Object.keys(rows[0] || {
-    name: '', region: '', vertical: '', funding: '', linkedin: '', latest_news: '', source: '',
+    name: '', region: '', city: '', vertical: '', funding: '', linkedin: '', latest_news: '', source: '',
     tidb_potential_score: '', tidb_potential_reason: '', lead_status: '', owner: '', tags: '',
     source_confidence: '', enrich_status: '', manual_locked: '', manual_note: '', created_at: '', updated_at: ''
   });

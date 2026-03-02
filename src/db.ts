@@ -36,6 +36,7 @@ export async function migrate() {
 
     await addColumn(conn, `ALTER TABLE \`${TABLE}\` ADD COLUMN lead_status VARCHAR(32) NOT NULL DEFAULT 'new'`);
     await addColumn(conn, `ALTER TABLE \`${TABLE}\` ADD COLUMN owner VARCHAR(128) NULL`);
+    await addColumn(conn, `ALTER TABLE \`${TABLE}\` ADD COLUMN city VARCHAR(128) NULL`);
     await addColumn(conn, `ALTER TABLE \`${TABLE}\` ADD COLUMN emails TEXT NULL`);
     await addColumn(conn, `ALTER TABLE \`${TABLE}\` ADD COLUMN tags VARCHAR(512) NULL`);
     await addColumn(conn, `ALTER TABLE \`${TABLE}\` ADD COLUMN source_confidence INT NULL`);
