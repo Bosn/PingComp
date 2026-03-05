@@ -607,6 +607,7 @@ app.post('/api/leads', async (req: Request, res: Response) => {
   const source = String(b.source || 'manual').trim() || 'manual';
   const leadStatus = String(b.lead_status || 'new').trim() || 'new';
   const owner = String(b.owner || '').trim() || null;
+  const creator = String(b.creator || '').trim() || null;
   const region = String(b.region || '').trim();
   const city = String(b.city || '').trim();
   const scoreRaw = Number(b.tidb_potential_score);
@@ -618,9 +619,9 @@ app.post('/api/leads', async (req: Request, res: Response) => {
   try {
     const [ret]: any = await conn.execute(
       `INSERT INTO \`${TABLE}\`
-      (name, region, city, vertical, source, tidb_potential_score, tidb_potential_reason, lead_status, owner, manual_locked, emails, enrich_status, manual_updated_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, 'pending', NOW(), NOW())`,
-      [name, region || null, city || null, vertical, source, score, reason, leadStatus, owner, emails]
+      (name, region, city, vertical, source, tidb_potential_score, tidb_potential_reason, lead_status, owner, creator, manual_locked, emails, enrich_status, manual_updated_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, 'pending', NOW(), NOW())`,
+      [name, region || null, city || null, vertical, source, score, reason, leadStatus, owner, creator, emails]
     );
 
     const id = Number(ret?.insertId || 0);
@@ -749,12 +750,12 @@ app.put('/api/leads/:id', async (req: Request, res: Response) => {
   await conn.execute(
     `UPDATE \`${TABLE}\` SET
       name=?, region=?, city=?, vertical=?, funding=?, linkedin=?, latest_news=?, source=?,
-      tidb_potential_score=?, tidb_potential_reason=?, manual_note=?, lead_status=?, owner=?, tags=?, source_confidence=?, enrich_status=?,
+      tidb_potential_score=?, tidb_potential_reason=?, manual_note=?, lead_status=?, owner=?, creator=?, tags=?, source_confidence=?, enrich_status=?,
       manual_locked=1, manual_updated_at=NOW(), updated_at=NOW()
      WHERE id=?`,
     [
       b.name || '', b.region || '', b.city || '', b.vertical || '', b.funding || '', b.linkedin || '', b.latest_news || '', b.source || '',
-      b.tidb_potential_score || null, b.tidb_potential_reason || '', b.manual_note || '', b.lead_status || 'new', b.owner || null,
+      b.tidb_potential_score || null, b.tidb_potential_reason || '', b.manual_note || '', b.lead_status || 'new', b.owner || null, b.creator || null,
       b.tags || null, b.source_confidence || null, b.enrich_status || 'pending', req.params.id
     ]
   );
@@ -1298,6 +1299,30 @@ app.get('/api/regions', async (req: Request, res: Response) => {
   await conn.end();
   res.json({
     rows: (rows || []).map((r: any) => ({ value: r.region, label: r.region, count: Number(r.c || 0) }))
+  });
+});
+
+app.get('/api/field-values', async (req: Request, res: Response) => {
+  const field = String(req.query.field || '').trim();
+  const q = String(req.query.q || '').trim();
+  if (!['owner', 'creator'].includes(field)) return res.status(400).json({ ok: false, error: 'invalid field' });
+
+  const conn = await getConn();
+  const args: any[] = [];
+  let where = `WHERE \`${field}\` IS NOT NULL AND \`${field}\` <> ''`;
+  if (q) {
+    where += ` AND \`${field}\` LIKE ?`;
+    args.push(`%${q}%`);
+  }
+
+  const [rows]: any = await conn.query(
+    `SELECT \`${field}\` v, COUNT(*) c FROM \`${TABLE}\` ${where} GROUP BY \`${field}\` ORDER BY c DESC, v ASC LIMIT 100`,
+    args
+  );
+  await conn.end();
+
+  res.json({
+    rows: (rows || []).map((r: any) => ({ value: r.v, label: r.v, count: Number(r.c || 0) }))
   });
 });
 

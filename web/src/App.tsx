@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ActionIcon, Anchor, AppShell, Avatar, Badge, Box, Button, Card, Checkbox, Collapse, Divider, Group, Menu, Modal, NumberInput, Paper, ScrollArea, Select, Slider,
+  ActionIcon, Anchor, AppShell, Autocomplete, Avatar, Badge, Box, Button, Card, Checkbox, Collapse, Divider, Group, Menu, Modal, NumberInput, Paper, ScrollArea, Select, Slider,
   SimpleGrid, Stack, Table, Tabs, Text, TextInput, Textarea, Title, Tooltip, useComputedColorScheme, useMantineColorScheme,
 } from '@mantine/core';
-import { IconActivity, IconArrowDown, IconArrowUp, IconBolt, IconBrain, IconEdit, IconFilter, IconGauge, IconLock, IconMessageCircle, IconMoonStars, IconSend, IconSun, IconTrash, IconWorld, IconNotes, IconDownload } from '@tabler/icons-react';
+import { IconActivity, IconArrowDown, IconArrowUp, IconBolt, IconBrain, IconEdit, IconFilter, IconGauge, IconLock, IconMessageCircle, IconMoonStars, IconSend, IconSun, IconTrash, IconWorld, IconNotes, IconDownload, IconPlus } from '@tabler/icons-react';
 
 type Lead = {
   id: number; name: string; region?: string; city?: string; vertical: string; source: string;
@@ -206,6 +206,8 @@ export function App() {
   const [regionOptions, setRegionOptions] = useState<Array<{ value: string; label: string }>>([]);
   const [regionSearch, setRegionSearch] = useState('');
   const [regionLoading, setRegionLoading] = useState(false);
+  const [ownerOptions, setOwnerOptions] = useState<string[]>([]);
+  const [creatorOptions, setCreatorOptions] = useState<string[]>([]);
   const [lockedOnly, setLockedOnly] = useState<boolean>(false);
   const [showMoreFilters, setShowMoreFilters] = useState<boolean>(false);
   const [compactMode, setCompactMode] = useState<boolean>(true);
@@ -218,7 +220,7 @@ export function App() {
   const [createLeadSubmitting, setCreateLeadSubmitting] = useState(false);
   const [createLeadDraft, setCreateLeadDraft] = useState<any>({
     name: '', vertical: '', region: '', city: '', source: 'manual',
-    lead_status: 'new', owner: '', emails: '', tidb_potential_score: 0, tidb_potential_reason: '',
+    lead_status: 'new', owner: '', creator: '', emails: '', tidb_potential_score: 0, tidb_potential_reason: '',
   });
   const [loading, setLoading] = useState(false);
   const [agentInput, setAgentInput] = useState('');
@@ -442,10 +444,18 @@ export function App() {
     }
   }
 
+  async function loadFieldValues(field: 'owner' | 'creator', q = '') {
+    const r = await fetch(`/api/field-values?field=${field}&q=${encodeURIComponent(q)}`);
+    const j = await r.json();
+    const vals = (j.rows || []).map((x: any) => String(x.value || '').trim()).filter(Boolean);
+    if (field === 'owner') setOwnerOptions(vals);
+    else setCreatorOptions(vals);
+  }
+
   useEffect(() => {
     if (tab === 'dashboard') loadDashboard();
     if (tab === 'enrich') loadEnrich();
-    if (tab === 'leads') { loadLeads(); loadRegions(''); }
+    if (tab === 'leads') { loadLeads(); loadRegions(''); loadFieldValues('owner'); loadFieldValues('creator'); }
     if (tab === 'outreach') { loadOutreachSends(); }
     if (tab === 'interviews') { setInterviewsCursor(null); loadInterviews({ reset: true }); }
   }, [tab]);
@@ -482,6 +492,12 @@ export function App() {
     return () => window.clearTimeout(h);
   }, [regionSearch, tab]);
 
+  useEffect(() => {
+    if (tab !== 'leads') return;
+    if (!createLeadOpen && !selected) return;
+    loadFieldValues('owner');
+    loadFieldValues('creator');
+  }, [createLeadOpen, selected?.id, tab]);
 
   useEffect(() => {
     if (tab) localStorage.setItem('pingcomp_tab', tab);
@@ -578,6 +594,7 @@ export function App() {
         source: String(createLeadDraft.source || 'manual').trim() || 'manual',
         lead_status: String(createLeadDraft.lead_status || 'new').trim() || 'new',
         owner: String(createLeadDraft.owner || '').trim() || null,
+        creator: String(createLeadDraft.creator || '').trim() || null,
         emails: String(createLeadDraft.emails || ''),
         tidb_potential_score: Number(createLeadDraft.tidb_potential_score || 0),
         tidb_potential_reason: String(createLeadDraft.tidb_potential_reason || ''),
@@ -586,7 +603,7 @@ export function App() {
       const j = await r.json();
       if (!r.ok || !j?.ok) throw new Error(j?.error || 'create failed');
       setCreateLeadOpen(false);
-      setCreateLeadDraft({ name: '', vertical: '', region: '', city: '', source: 'manual', lead_status: 'new', owner: '', emails: '', tidb_potential_score: 0, tidb_potential_reason: '' });
+      setCreateLeadDraft({ name: '', vertical: '', region: '', city: '', source: 'manual', lead_status: 'new', owner: '', creator: '', emails: '', tidb_potential_score: 0, tidb_potential_reason: '' });
       markRecentEdited([Number(j.id)]);
       await Promise.all([loadLeads(), loadDashboard()]);
     } catch (e: any) {
@@ -864,8 +881,10 @@ export function App() {
                     <Button variant="default" onClick={() => setShowMoreFilters(v => !v)}>{showMoreFilters ? 'Less' : 'More'}</Button>
                     <Button variant="subtle" onClick={() => { setQ(''); setMinScore(0); setStatus(null); setRegion(null); setLockedOnly(false); setPage(1); setShowMoreFilters(false); }}>{t.reset}</Button>
                   </Group>
-                  <Button variant="default" onClick={() => setCreateLeadOpen(true)}>{t.addLead}</Button>
-                  <Button component="a" href="/api/export.csv" variant="light" leftSection={<IconDownload size={14} />}>{t.exportCsv}</Button>
+                  <Group gap={8}>
+                    <Button onClick={() => setCreateLeadOpen(true)} leftSection={<IconPlus size={14} />}>{t.addLead}</Button>
+                    <Button component="a" href="/api/export.csv" variant="light" leftSection={<IconDownload size={14} />}>{t.exportCsv}</Button>
+                  </Group>
                 </Group>
 
                 <Collapse in={showMoreFilters}>
@@ -1224,7 +1243,22 @@ export function App() {
           <Group grow>
             <TextInput label="Source" value={createLeadDraft.source} onChange={(e) => setCreateLeadDraft({ ...createLeadDraft, source: e.currentTarget.value })} />
             <Select label="Status" data={statusOptions} value={createLeadDraft.lead_status} onChange={(v) => setCreateLeadDraft({ ...createLeadDraft, lead_status: v || 'new' })} />
-            <TextInput label="Owner" value={createLeadDraft.owner} onChange={(e) => setCreateLeadDraft({ ...createLeadDraft, owner: e.currentTarget.value })} />
+          </Group>
+          <Group grow>
+            <Autocomplete
+              label="Owner"
+              data={ownerOptions}
+              value={createLeadDraft.owner}
+              onChange={(v) => setCreateLeadDraft({ ...createLeadDraft, owner: v })}
+              placeholder="Search or type new owner"
+            />
+            <Autocomplete
+              label="Creator"
+              data={creatorOptions}
+              value={createLeadDraft.creator}
+              onChange={(v) => setCreateLeadDraft({ ...createLeadDraft, creator: v })}
+              placeholder="Search or type new creator"
+            />
           </Group>
           <Textarea label={(t as any).emails || 'Emails'} minRows={3} value={createLeadDraft.emails} onChange={(e) => setCreateLeadDraft({ ...createLeadDraft, emails: e.currentTarget.value })} />
           <NumberInput label="Score" min={0} max={100} value={createLeadDraft.tidb_potential_score} onChange={(v: any) => setCreateLeadDraft({ ...createLeadDraft, tidb_potential_score: Number(v || 0) })} />
@@ -1244,7 +1278,22 @@ export function App() {
             <TextInput label="Region" value={selected.region || ''} onChange={(e) => setSelected({ ...selected, region: e.currentTarget.value })} />
             <TextInput label="City" value={selected.city || ''} onChange={(e) => setSelected({ ...selected, city: e.currentTarget.value })} />
             <Select label="Status" data={statusOptions} value={selected.lead_status} onChange={(v) => setSelected({ ...selected, lead_status: v || 'new' })} />
-            <TextInput label="Owner" value={selected.owner || ''} onChange={(e) => setSelected({ ...selected, owner: e.currentTarget.value })} />
+            <Group grow>
+              <Autocomplete
+                label="Owner"
+                data={ownerOptions}
+                value={selected.owner || ''}
+                onChange={(v) => setSelected({ ...selected, owner: v })}
+                placeholder="Search or type new owner"
+              />
+              <Autocomplete
+                label="Creator"
+                data={creatorOptions}
+                value={selected.creator || ''}
+                onChange={(v) => setSelected({ ...selected, creator: v })}
+                placeholder="Search or type new creator"
+              />
+            </Group>
             <Textarea label={(t as any).emails || 'Emails'} description="Comma/newline separated. Saved to lead.emails." minRows={3} maxRows={6} autosize value={(selected.emails as any) || ''} onChange={(e) => setSelected({ ...selected, emails: e.currentTarget.value })} />
             <NumberInput label="Score" min={0} max={100} value={selected.tidb_potential_score ?? 0} onChange={(v: any) => setSelected({ ...selected, tidb_potential_score: Number(v) })} />
             <Textarea label="Reason" minRows={14} maxRows={14} autosize value={selected.tidb_potential_reason || ''} onChange={(e) => setSelected({ ...selected, tidb_potential_reason: e.currentTarget.value })} />
