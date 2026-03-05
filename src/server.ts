@@ -141,6 +141,15 @@ const ensureAuth = (req: Request, res: Response, next: NextFunction) => {
 
 app.get('/api/health', (_req: Request, res: Response) => res.json({ ok: true }));
 
+app.get('/api/auth/me', (req: Request, res: Response) => {
+  const user = (req as any).oidc?.user || null;
+  if (!user) return res.status(401).json({ ok: false, user: null });
+  const email = String(user.email || user.upn || user.preferred_username || '').trim();
+  const name = String(user.name || user.nickname || '').trim();
+  const picture = String(user.picture || '').trim();
+  return res.json({ ok: true, user: { email, name, picture } });
+});
+
 app.get('/login', (_req: Request, res: Response) => res.redirect('/login-pingcap'));
 
 app.get('/login-pingcap', (req: Request, res: Response) => {
