@@ -3,6 +3,7 @@ import dotenv from 'dotenv';
 import { auth } from 'express-openid-connect';
 import { getConn, migrate, TABLE } from './db.js';
 import { htmlToPlain } from './utils/htmlToPlain.js';
+import { getSendGridConfigError, isSendGridEnabled, sendViaSendGrid } from './services/sendgrid.js';
 dotenv.config();
 const app = express();
 const port = Number(process.env.PORT || 3788);
@@ -131,6 +132,15 @@ const ensureAuth = (req, res, next) => {
     return res.redirect('/login-pingcap');
 };
 app.get('/api/health', (_req, res) => res.json({ ok: true }));
+app.get('/api/auth/me', (req, res) => {
+    const user = req.oidc?.user || null;
+    if (!user)
+        return res.status(401).json({ ok: false, user: null });
+    const email = String(user.email || user.upn || user.preferred_username || '').trim();
+    const name = String(user.name || user.nickname || '').trim();
+    const picture = String(user.picture || '').trim();
+    return res.json({ ok: true, user: { email, name, picture } });
+});
 app.get('/login', (_req, res) => res.redirect('/login-pingcap'));
 app.get('/login-pingcap', (req, res) => {
     if (!authEnabled || !res.oidc?.login)
@@ -156,6 +166,8 @@ app.get('/logout', (req, res) => {
 app.use('/api', (req, res, next) => {
     if (req.path === '/health')
         return next();
+    if (req.path === '/outreach/sendgrid/events')
+        return next();
     return ensureAuth(req, res, next);
 });
 async function logActivity(conn, leadId, action, actor = 'pingcomp-ui', beforeObj = null, afterObj = null) {
@@ -167,6 +179,22 @@ async function logActivity(conn, leadId, action, actor = 'pingcomp-ui', beforeOb
 function getActor(req) {
     const email = String(req.oidc?.user?.email || '').trim();
     return email || 'pingcomp-react';
+}
+function normalizeEmails(input) {
+    const raw = Array.isArray(input) ? input.join(',') : String(input ?? '');
+    const parts = raw
+        .split(/[\n,;]+/g)
+        .map(s => String(s).trim().toLowerCase())
+        .filter(Boolean);
+    const out = [];
+    const seen = new Set();
+    for (const p of parts) {
+        if (seen.has(p))
+            continue;
+        seen.add(p);
+        out.push(p);
+    }
+    return out;
 }
 // -------- API --------
 // Interviews v1 (M2 scaffold + core create/update/read/delete)
@@ -558,6 +586,41 @@ app.get('/interviews/export.md', ensureAuthForNonApi, async (req, res) => {
         await conn.end();
     }
 });
+app.post('/api/leads', async (req, res) => {
+    const b = req.body || {};
+    const name = String(b.name || '').trim();
+    const vertical = String(b.vertical || '').trim();
+    if (!name)
+        return res.status(400).json({ ok: false, error: 'missing name' });
+    if (!vertical)
+        return res.status(400).json({ ok: false, error: 'missing vertical' });
+    const emails = normalizeEmails(b.emails || '').join(',') || null;
+    const source = String(b.source || 'manual').trim() || 'manual';
+    const leadStatus = String(b.lead_status || 'new').trim() || 'new';
+    const owner = String(b.owner || '').trim() || null;
+    const creator = String(b.creator || '').trim() || null;
+    const region = String(b.region || '').trim();
+    const city = String(b.city || '').trim();
+    const scoreRaw = Number(b.tidb_potential_score);
+    const score = Number.isFinite(scoreRaw) ? Math.max(0, Math.min(100, scoreRaw)) : null;
+    const reason = String(b.tidb_potential_reason || '').trim();
+    const actor = getActor(req);
+    const conn = await getConn();
+    try {
+        const [ret] = await conn.execute(`INSERT INTO \`${TABLE}\`
+      (name, region, city, vertical, source, tidb_potential_score, tidb_potential_reason, lead_status, owner, creator, manual_locked, emails, enrich_status, manual_updated_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, 'pending', NOW(), NOW())`, [name, region || null, city || null, vertical, source, score, reason, leadStatus, owner, creator, emails]);
+        const id = Number(ret?.insertId || 0);
+        if (id > 0) {
+            const [rows] = await conn.query(`SELECT * FROM \`${TABLE}\` WHERE id=?`, [id]);
+            await logActivity(conn, id, 'api_manual_create', actor, null, rows?.[0] || null);
+        }
+        return res.json({ ok: true, id });
+    }
+    finally {
+        await conn.end();
+    }
+});
 app.get('/api/leads', async (req, res) => {
     const q = String(req.query.q || '').trim();
     const min = Number(req.query.minScore || 0);
@@ -613,7 +676,7 @@ app.get('/api/leads', async (req, res) => {
     const totalPages = Math.max(1, Math.ceil(total / pageSize));
     const safePage = Math.min(page, totalPages);
     const offset = (safePage - 1) * pageSize;
-    const [rows] = await conn.query(`SELECT id,name,region,vertical,funding,linkedin,latest_news,source,tidb_potential_score,tidb_potential_reason,manual_locked,manual_note,lead_status,owner,creator,tags,source_confidence,enrich_status,created_at,updated_at FROM \`${TABLE}\` ${where} ORDER BY ${orderBy} LIMIT ? OFFSET ?`, [...args, pageSize, offset]);
+    const [rows] = await conn.query(`SELECT id,name,region,city,vertical,funding,linkedin,emails,latest_news,source,tidb_potential_score,tidb_potential_reason,manual_locked,manual_note,lead_status,owner,creator,tags,source_confidence,enrich_status,created_at,updated_at FROM \`${TABLE}\` ${where} ORDER BY ${orderBy} LIMIT ? OFFSET ?`, [...args, pageSize, offset]);
     await conn.end();
     res.json({ rows, total, page: safePage, totalPages, pageSize });
 });
@@ -625,18 +688,56 @@ app.get('/api/leads/:id', async (req, res) => {
         return res.status(404).json({ error: 'Not found' });
     res.json(rows[0]);
 });
+app.get('/api/leads/:id/emails', async (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id) || id <= 0)
+        return res.status(400).json({ ok: false, error: 'invalid id' });
+    const conn = await getConn();
+    const [rows] = await conn.query('SELECT emails FROM `' + TABLE + '` WHERE id=?', [id]);
+    await conn.end();
+    if (!rows?.[0])
+        return res.status(404).json({ ok: false, error: 'not found' });
+    const raw = String(rows?.[0]?.emails || '');
+    const emails = normalizeEmails(raw);
+    return res.json({ ok: true, id, emails, raw });
+});
+app.put('/api/leads/:id/emails', async (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id) || id <= 0)
+        return res.status(400).json({ ok: false, error: 'invalid id' });
+    const b = req.body || {};
+    const nextEmails = normalizeEmails(b.emails ?? b.value ?? b);
+    const nextRaw = nextEmails.length ? nextEmails.join(',') : null;
+    const actor = getActor(req);
+    const conn = await getConn();
+    try {
+        const [beforeRows] = await conn.query('SELECT emails FROM `' + TABLE + '` WHERE id=?', [id]);
+        const before = beforeRows?.[0] || null;
+        if (!before)
+            return res.status(404).json({ ok: false, error: 'not found' });
+        await conn.execute('UPDATE `' + TABLE + '` SET emails=?, updated_at=NOW(), manual_updated_at=NOW(), manual_locked=1 WHERE id=?', [nextRaw, id]);
+        await logActivity(conn, id, 'api_emails_update', actor, before, { emails: nextRaw });
+        const [afterRows] = await conn.query('SELECT emails FROM `' + TABLE + '` WHERE id=?', [id]);
+        const raw = String(afterRows?.[0]?.emails || '');
+        const emails = normalizeEmails(raw);
+        return res.json({ ok: true, id, emails, raw });
+    }
+    finally {
+        await conn.end();
+    }
+});
 app.put('/api/leads/:id', async (req, res) => {
     const b = req.body || {};
     const conn = await getConn();
     const [beforeRows] = await conn.query(`SELECT * FROM \`${TABLE}\` WHERE id=?`, [req.params.id]);
     const beforeRow = beforeRows?.[0] || null;
     await conn.execute(`UPDATE \`${TABLE}\` SET
-      name=?, region=?, vertical=?, funding=?, linkedin=?, latest_news=?, source=?,
-      tidb_potential_score=?, tidb_potential_reason=?, manual_note=?, lead_status=?, owner=?, tags=?, source_confidence=?, enrich_status=?,
+      name=?, region=?, city=?, vertical=?, funding=?, linkedin=?, latest_news=?, source=?,
+      tidb_potential_score=?, tidb_potential_reason=?, manual_note=?, lead_status=?, owner=?, creator=?, tags=?, source_confidence=?, enrich_status=?,
       manual_locked=1, manual_updated_at=NOW(), updated_at=NOW()
      WHERE id=?`, [
-        b.name || '', b.region || '', b.vertical || '', b.funding || '', b.linkedin || '', b.latest_news || '', b.source || '',
-        b.tidb_potential_score || null, b.tidb_potential_reason || '', b.manual_note || '', b.lead_status || 'new', b.owner || null,
+        b.name || '', b.region || '', b.city || '', b.vertical || '', b.funding || '', b.linkedin || '', b.latest_news || '', b.source || '',
+        b.tidb_potential_score || null, b.tidb_potential_reason || '', b.manual_note || '', b.lead_status || 'new', b.owner || null, b.creator || null,
         b.tags || null, b.source_confidence || null, b.enrich_status || 'pending', req.params.id
     ]);
     await logActivity(conn, Number(req.params.id), 'api_manual_edit_lock', 'pingcomp-react', beforeRow, b);
@@ -690,6 +791,230 @@ app.delete('/api/leads/:id', async (req, res) => {
     await logActivity(conn, id, 'api_delete', 'pingcomp-react', row, null);
     await conn.end();
     return res.json({ ok: true, id });
+});
+app.post('/api/outreach/email-sends', async (req, res) => {
+    const b = req.body || {};
+    const leadId = Number(b.leadId);
+    const email = String(b.email || '').trim().toLowerCase();
+    const subject = b.subject == null ? null : String(b.subject || '').trim();
+    const content = b.content == null ? null : String(b.content || '');
+    const actor = getActor(req);
+    const sender = String(b.sender || actor).trim() || null;
+    const campaignId = b.campaignId == null ? null : String(b.campaignId || '').trim() || null;
+    const variant = b.variant == null ? null : String(b.variant || '').trim() || null;
+    const forceProvider = String(b.provider || '').trim().toLowerCase();
+    if (!Number.isFinite(leadId) || leadId <= 0)
+        return res.status(400).json({ ok: false, error: 'invalid leadId' });
+    if (!email)
+        return res.status(400).json({ ok: false, error: 'missing email' });
+    const shouldUseSendGrid = forceProvider === 'sendgrid' || String(process.env.OUTREACH_REAL_SEND || '').toLowerCase() === 'true';
+    let provider = null;
+    let providerMessageId = null;
+    let status = null;
+    let errorMessage = null;
+    if (shouldUseSendGrid) {
+        if (!isSendGridEnabled()) {
+            return res.status(400).json({ ok: false, error: 'sendgrid not enabled (set SENDGRID_ENABLED=true)' });
+        }
+        const configError = getSendGridConfigError();
+        if (configError)
+            return res.status(400).json({ ok: false, error: configError });
+        try {
+            const sendResult = await sendViaSendGrid({
+                to: email,
+                subject,
+                content,
+                customArgs: {
+                    leadId: String(leadId),
+                    campaignId: campaignId || '',
+                    variant: variant || '',
+                },
+            });
+            provider = sendResult.provider;
+            providerMessageId = sendResult.providerMessageId;
+            status = sendResult.status;
+        }
+        catch (err) {
+            provider = 'sendgrid';
+            status = 'failed';
+            errorMessage = String(err?.message || 'sendgrid send failed');
+        }
+    }
+    const conn = await getConn();
+    try {
+        // Optional sentAt for backfill/testing; otherwise DB default CURRENT_TIMESTAMP.
+        const sentAt = b.sentAt ? new Date(String(b.sentAt)) : null;
+        const hasSentAt = sentAt && !Number.isNaN(sentAt.getTime());
+        const sqlWithSentAt = `INSERT INTO outreach_email_sends (lead_id, email, sent_at, subject, content, sender, provider, provider_message_id, status, error_message, campaign_id, variant) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+        const argsWithSentAt = [
+            leadId,
+            email,
+            sentAt?.toISOString().slice(0, 19).replace('T', ' '),
+            subject,
+            content,
+            sender,
+            provider,
+            providerMessageId,
+            status,
+            errorMessage,
+            campaignId,
+            variant,
+        ];
+        const sqlNoSentAt = `INSERT INTO outreach_email_sends (lead_id, email, subject, content, sender, provider, provider_message_id, status, error_message, campaign_id, variant) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+        const argsNoSentAt = [
+            leadId,
+            email,
+            subject,
+            content,
+            sender,
+            provider,
+            providerMessageId,
+            status,
+            errorMessage,
+            campaignId,
+            variant,
+        ];
+        if (hasSentAt) {
+            await conn.execute(sqlWithSentAt, argsWithSentAt);
+        }
+        else {
+            await conn.execute(sqlNoSentAt, argsNoSentAt);
+        }
+        const [rows] = await conn.query('SELECT * FROM outreach_email_sends WHERE lead_id=? AND email=? ORDER BY id DESC LIMIT 1', [leadId, email]);
+        const row = rows?.[0] || null;
+        if (shouldUseSendGrid && status === 'failed') {
+            return res.status(502).json({ ok: false, error: errorMessage || 'send failed', row });
+        }
+        return res.json({ ok: true, row, send: shouldUseSendGrid ? { provider, providerMessageId, status } : null });
+    }
+    finally {
+        await conn.end();
+    }
+});
+app.post('/api/outreach/sendgrid/events', async (req, res) => {
+    const verificationKey = String(process.env.SENDGRID_EVENT_WEBHOOK_KEY || '').trim();
+    if (verificationKey) {
+        const key = String(req.headers['x-sendgrid-key'] || '').trim();
+        if (key !== verificationKey)
+            return res.status(401).json({ ok: false, error: 'unauthorized' });
+    }
+    const events = Array.isArray(req.body) ? req.body : [];
+    if (!events.length)
+        return res.json({ ok: true, updated: 0 });
+    const conn = await getConn();
+    try {
+        let updated = 0;
+        for (const e of events) {
+            const event = String(e?.event || '').trim().toLowerCase();
+            const sgMessageIdRaw = String(e?.sg_message_id || e?.sg_messageid || '').trim();
+            const providerMessageId = sgMessageIdRaw.split('.')[0] || sgMessageIdRaw;
+            const email = String(e?.email || '').trim().toLowerCase();
+            if (!providerMessageId && !email)
+                continue;
+            let nextStatus = '';
+            if (event === 'processed' || event === 'deferred')
+                nextStatus = 'queued';
+            else if (event === 'delivered')
+                nextStatus = 'delivered';
+            else if (event === 'open')
+                nextStatus = 'opened';
+            else if (event === 'click')
+                nextStatus = 'clicked';
+            else if (event === 'bounce' || event === 'dropped' || event === 'spamreport')
+                nextStatus = 'bounced';
+            else if (event === 'unsubscribe' || event === 'group_unsubscribe')
+                nextStatus = 'unsubscribed';
+            else
+                continue;
+            const msg = String(e?.reason || e?.response || e?.status || '').slice(0, 1000) || null;
+            if (providerMessageId) {
+                const [ret] = await conn.execute('UPDATE outreach_email_sends SET status=?, error_message=COALESCE(?, error_message), updated_at=NOW() WHERE provider=? AND provider_message_id=?', [nextStatus, msg, 'sendgrid', providerMessageId]);
+                updated += Number(ret?.affectedRows || 0);
+            }
+            else {
+                const [ret] = await conn.execute('UPDATE outreach_email_sends SET status=?, error_message=COALESCE(?, error_message), updated_at=NOW() WHERE provider=? AND email=? ORDER BY id DESC LIMIT 1', [nextStatus, msg, 'sendgrid', email]);
+                updated += Number(ret?.affectedRows || 0);
+            }
+        }
+        return res.json({ ok: true, updated });
+    }
+    finally {
+        await conn.end();
+    }
+});
+app.get('/api/outreach/email-sends', async (req, res) => {
+    const leadId = req.query.leadId == null ? null : Number(req.query.leadId);
+    const email = String(req.query.email || '').trim().toLowerCase();
+    const from = String(req.query.from || '').trim();
+    const to = String(req.query.to || '').trim();
+    const limit = Math.min(500, Math.max(1, Number(req.query.limit || 200)));
+    let where = ' WHERE 1=1';
+    const args = [];
+    if (leadId != null) {
+        if (!Number.isFinite(leadId) || leadId <= 0)
+            return res.status(400).json({ ok: false, error: 'invalid leadId' });
+        where += ' AND lead_id=?';
+        args.push(leadId);
+    }
+    if (email) {
+        where += ' AND email=?';
+        args.push(email);
+    }
+    if (from) {
+        const d = new Date(from);
+        if (Number.isNaN(d.getTime()))
+            return res.status(400).json({ ok: false, error: 'invalid from' });
+        where += ' AND sent_at>=?';
+        args.push(d.toISOString().slice(0, 19).replace('T', ' '));
+    }
+    if (to) {
+        const d = new Date(to);
+        if (Number.isNaN(d.getTime()))
+            return res.status(400).json({ ok: false, error: 'invalid to' });
+        where += ' AND sent_at<=?';
+        args.push(d.toISOString().slice(0, 19).replace('T', ' '));
+    }
+    const conn = await getConn();
+    try {
+        const [rows] = await conn.query(`SELECT * FROM outreach_email_sends ${where} ORDER BY sent_at DESC, id DESC LIMIT ?`, [...args, limit]);
+        const list = Array.isArray(rows) ? rows : [];
+        const grouped = new Map();
+        for (const r of list) {
+            const k = [
+                String(r.lead_id || ''),
+                String(r.campaign_id || ''),
+                String(r.variant || ''),
+                String(r.subject || ''),
+                String(r.sender || ''),
+                String(r.sent_at || '').slice(0, 19),
+            ].join('||');
+            const arr = grouped.get(k) || [];
+            const email1 = String(r.email || '').trim().toLowerCase();
+            if (email1 && !arr.includes(email1))
+                arr.push(email1);
+            grouped.set(k, arr);
+        }
+        const enhanced = list.map((r) => {
+            const k = [
+                String(r.lead_id || ''),
+                String(r.campaign_id || ''),
+                String(r.variant || ''),
+                String(r.subject || ''),
+                String(r.sender || ''),
+                String(r.sent_at || '').slice(0, 19),
+            ].join('||');
+            const recipients = grouped.get(k) || [];
+            return {
+                ...r,
+                batch_recipients: recipients,
+                batch_recipient_count: recipients.length,
+            };
+        });
+        return res.json({ ok: true, rows: enhanced });
+    }
+    finally {
+        await conn.end();
+    }
 });
 app.post('/api/agent/chat', async (req, res) => {
     const message = String(req.body?.message || '').trim();
@@ -790,7 +1115,7 @@ app.post('/api/agent/chat', async (req, res) => {
     let sqlUsed = '';
     if (qwenKey) {
         try {
-            const sqlPrompt = `Table: ${TABLE}\nColumns: id,name,region,vertical,funding,linkedin,latest_news,source,tidb_potential_score,tidb_potential_reason,manual_locked,lead_status,owner,tags,source_confidence,enrich_status,created_at,updated_at.\nGenerate ONE read-only SQL SELECT for MySQL to answer the user question.\nConstraints: SELECT only, from ${TABLE} only, no comments, no semicolon, include LIMIT <= 200. Return JSON only: {\"sql\":\"...\"}.`;
+            const sqlPrompt = `Table: ${TABLE}\nColumns: id,name,region,city,vertical,funding,linkedin,latest_news,source,tidb_potential_score,tidb_potential_reason,manual_locked,lead_status,owner,tags,source_confidence,enrich_status,created_at,updated_at.\nGenerate ONE read-only SQL SELECT for MySQL to answer the user question.\nConstraints: SELECT only, from ${TABLE} only, no comments, no semicolon, include LIMIT <= 200. Return JSON only: {\"sql\":\"...\"}.`;
             const sqlText = await runQwen(sqlPrompt, message);
             const m = sqlText.match(/\{[\s\S]*\}/);
             const parsed = m ? JSON.parse(m[0]) : null;
@@ -835,7 +1160,7 @@ app.post('/api/agent/chat', async (req, res) => {
                 break;
             }
         }
-        const [baseRows] = await conn.query(`SELECT id,name,region,owner,vertical,lead_status,manual_locked,tidb_potential_score,tidb_potential_reason,updated_at
+        const [baseRows] = await conn.query(`SELECT id,name,region,city,owner,vertical,lead_status,manual_locked,tidb_potential_score,tidb_potential_reason,updated_at
        FROM \`${TABLE}\`
        ${fallbackWhere}
        ORDER BY IFNULL(tidb_potential_score,0) DESC, updated_at DESC
@@ -894,10 +1219,10 @@ app.get('/api/export.csv', async (req, res) => {
         where += ' AND lead_status=?';
         args.push(status);
     }
-    const [rows] = await conn.query(`SELECT name,region,vertical,funding,linkedin,latest_news,source,tidb_potential_score,tidb_potential_reason,lead_status,owner,tags,source_confidence,enrich_status,manual_locked,manual_note,created_at,updated_at FROM \`${TABLE}\` ${where} ORDER BY IFNULL(tidb_potential_score,0) DESC`, args);
+    const [rows] = await conn.query(`SELECT name,region,city,vertical,funding,linkedin,latest_news,source,tidb_potential_score,tidb_potential_reason,lead_status,owner,tags,source_confidence,enrich_status,manual_locked,manual_note,created_at,updated_at FROM \`${TABLE}\` ${where} ORDER BY IFNULL(tidb_potential_score,0) DESC`, args);
     await conn.end();
     const headers = Object.keys(rows[0] || {
-        name: '', region: '', vertical: '', funding: '', linkedin: '', latest_news: '', source: '',
+        name: '', region: '', city: '', vertical: '', funding: '', linkedin: '', latest_news: '', source: '',
         tidb_potential_score: '', tidb_potential_reason: '', lead_status: '', owner: '', tags: '',
         source_confidence: '', enrich_status: '', manual_locked: '', manual_note: '', created_at: '', updated_at: ''
     });
@@ -925,6 +1250,24 @@ app.get('/api/regions', async (req, res) => {
     await conn.end();
     res.json({
         rows: (rows || []).map((r) => ({ value: r.region, label: r.region, count: Number(r.c || 0) }))
+    });
+});
+app.get('/api/field-values', async (req, res) => {
+    const field = String(req.query.field || '').trim();
+    const q = String(req.query.q || '').trim();
+    if (!['owner', 'creator'].includes(field))
+        return res.status(400).json({ ok: false, error: 'invalid field' });
+    const conn = await getConn();
+    const args = [];
+    let where = `WHERE \`${field}\` IS NOT NULL AND \`${field}\` <> ''`;
+    if (q) {
+        where += ` AND \`${field}\` LIKE ?`;
+        args.push(`%${q}%`);
+    }
+    const [rows] = await conn.query(`SELECT \`${field}\` v, COUNT(*) c FROM \`${TABLE}\` ${where} GROUP BY \`${field}\` ORDER BY c DESC, v ASC LIMIT 100`, args);
+    await conn.end();
+    res.json({
+        rows: (rows || []).map((r) => ({ value: r.v, label: r.v, count: Number(r.c || 0) }))
     });
 });
 app.get('/api/dashboard', async (_req, res) => {
