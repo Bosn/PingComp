@@ -19,6 +19,12 @@
   100% { background-position: 0% 50%; }
 }
 
+@keyframes pcBannerGradientDrift {
+  0% { background-position: 46% 48%; opacity: 0.92; }
+  50% { background-position: 54% 52%; opacity: 1; }
+  100% { background-position: 46% 48%; opacity: 0.92; }
+}
+
 @keyframes pcBounce {
   0%, 80%, 100% { transform: scale(0); }
   40% { transform: scale(1); }

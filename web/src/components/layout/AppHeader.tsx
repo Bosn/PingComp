@@ -50,8 +50,9 @@ export function AppHeader({ t, lang, setLang, me }: AppHeaderProps) {
           background: isDark
             ? 'linear-gradient(120deg, rgba(59,130,246,0.15), rgba(139,92,246,0.12), rgba(6,182,212,0.10), rgba(59,130,246,0.15))'
             : 'linear-gradient(120deg, rgba(59,130,246,0.08), rgba(139,92,246,0.06), rgba(6,182,212,0.05), rgba(59,130,246,0.08))',
-          backgroundSize: '300% 300%',
-          animation: 'pcPulseGradient 20s ease infinite',
+          backgroundSize: '240% 240%',
+          animation: 'pcBannerGradientDrift 34s ease-in-out infinite',
+          willChange: 'background-position, opacity',
           pointerEvents: 'none',
         }}
       />
