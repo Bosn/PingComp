@@ -9,6 +9,7 @@ export default defineConfig({
   use: {
     baseURL,
     headless: true,
+    storageState: './e2e/auth-state.json',
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
   },

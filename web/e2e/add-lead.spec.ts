@@ -7,6 +7,10 @@ test('Add Lead modal defaults Creator to current user email', async ({ page, req
 
   await page.goto('/app/');
 
+  const leadsTab = page.getByRole('tab', { name: /Leads|线索管理/i });
+  await expect(leadsTab).toBeVisible();
+  await leadsTab.click();
+
   const addLeadButton = page.getByRole('button', { name: /Add Lead|添加线索/i });
   await expect(addLeadButton).toBeVisible();
   await addLeadButton.click();
