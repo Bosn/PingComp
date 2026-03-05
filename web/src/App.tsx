@@ -487,6 +487,11 @@ export function App() {
   }, []);
 
   useEffect(() => {
+    if (!createLeadOpen) return;
+    setCreateLeadDraft((d: any) => ({ ...d, creator: d.creator || me?.email || '' }));
+  }, [createLeadOpen, me?.email]);
+
+  useEffect(() => {
     if (tab !== 'leads') return;
     const h = window.setTimeout(() => loadRegions(regionSearch), 260);
     return () => window.clearTimeout(h);
@@ -603,7 +608,7 @@ export function App() {
       const j = await r.json();
       if (!r.ok || !j?.ok) throw new Error(j?.error || 'create failed');
       setCreateLeadOpen(false);
-      setCreateLeadDraft({ name: '', vertical: '', region: '', city: '', source: 'manual', lead_status: 'new', owner: '', creator: '', emails: '', tidb_potential_score: 0, tidb_potential_reason: '' });
+      setCreateLeadDraft({ name: '', vertical: '', region: '', city: '', source: 'manual', lead_status: 'new', owner: '', creator: me?.email || '', emails: '', tidb_potential_score: 0, tidb_potential_reason: '' });
       markRecentEdited([Number(j.id)]);
       await Promise.all([loadLeads(), loadDashboard()]);
     } catch (e: any) {
@@ -882,7 +887,7 @@ export function App() {
                     <Button variant="subtle" onClick={() => { setQ(''); setMinScore(0); setStatus(null); setRegion(null); setLockedOnly(false); setPage(1); setShowMoreFilters(false); }}>{t.reset}</Button>
                   </Group>
                   <Group gap={8}>
-                    <Button onClick={() => setCreateLeadOpen(true)} leftSection={<IconPlus size={14} />}>{t.addLead}</Button>
+                    <Button onClick={() => { setCreateLeadDraft((d: any) => ({ ...d, creator: d.creator || me?.email || '' })); setCreateLeadOpen(true); }} leftSection={<IconPlus size={14} />}>{t.addLead}</Button>
                     <Button component="a" href="/api/export.csv" variant="light" leftSection={<IconDownload size={14} />}>{t.exportCsv}</Button>
                   </Group>
                 </Group>
