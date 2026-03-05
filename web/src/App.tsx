@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActionIcon, Anchor, AppShell, Autocomplete, Avatar, Badge, Box, Button, Card, Checkbox, Collapse, Divider, Group, Menu, Modal, NumberInput, Paper, ScrollArea, Select, Slider,
-  SimpleGrid, Stack, Table, Tabs, Text, TextInput, Textarea, Title, Tooltip, useComputedColorScheme, useMantineColorScheme,
+  SimpleGrid, Stack, Table, Tabs, Text, TextInput, Textarea, ThemeIcon, Title, Tooltip, useComputedColorScheme, useMantineColorScheme,
 } from '@mantine/core';
-import { IconActivity, IconArrowDown, IconArrowUp, IconBolt, IconBrain, IconEdit, IconFilter, IconGauge, IconLock, IconMessageCircle, IconMoonStars, IconSend, IconSun, IconTrash, IconWorld, IconNotes, IconDownload, IconPlus } from '@tabler/icons-react';
+import { IconActivity, IconArrowDown, IconArrowUp, IconBolt, IconBrain, IconCheck, IconClock, IconEdit, IconFilter, IconGauge, IconLayoutGrid, IconLock, IconMessageCircle, IconMoonStars, IconPercentage, IconSend, IconSun, IconTrash, IconUsers, IconWorld, IconNotes, IconDownload, IconPlus, IconX } from '@tabler/icons-react';
 
 type Lead = {
   id: number; name: string; region?: string; city?: string; vertical: string; source: string;
@@ -75,7 +75,7 @@ type SavedView = {
 
 const I18N = {
   zh: {
-    title: 'PingComp', subtitle: '潜在客户人工清洗与标注', agent: 'Agent', dashboard: '仪表盘', leads: '线索管理', interviews: '访谈记录', enrich: 'Enrich 队列', outreach: '触达中心', emails: '触达邮件', leadId: '线索ID', email: '邮箱', from: '起始', to: '截止', sentAt: '发送时间', subject: '标题', sender: '发送方', content: '内容', apply: '应用', reset: '重置', loading: '加载中…',
+    title: 'PingComp', subtitle: '潜在客户人工清洗与标注', agent: 'Agent', dashboard: '仪表盘', leads: '线索管理', interviews: '访谈记录', enrich: 'Enrich 队列', outreach: '触达中心', emails: '触达邮件', leadId: '线索ID', email: '邮箱', from: '起始', to: '截止', sentAt: '发送时间', subject: '标题', sender: '发送方', content: '内容',
     filter: '筛选', reset: '重置', search: '搜索 name/owner/vertical/source/tags', minScore: '最低分', status: '状态', region: '国家/地区', creator: 'Creator', page: '页码', pageSize: '每页条数',
     lockOnly: '仅锁定', prev: '上一页', next: '下一页', edit: '编辑', saveLock: '保存并锁定', total: '总线索',
     locked: '人工锁定', avg: '平均分', lockRate: '锁定占比', exportCsv: '导出CSV', runBatch: '执行一轮(20条)',
@@ -83,7 +83,7 @@ const I18N = {
     bulkAction: '批量动作', apply: '执行', selected: '已选', quickViews: '快捷视图', savedViews: '已保存视图', saveView: '保存当前视图', deleteView: '删除视图', viewName: '视图名', account: '账户', logout: '退出', delete: '删除', deleteConfirm: '确认删除该线索？', deleteModalTitle: '确认删除', deleteModalDesc: '删除后不可恢复，请确认操作。', cancel: '取消', confirmDelete: '确认删除', askAgent: '问问 Agent', askPlaceholder: '例如：找出 owner 为某人、分数大于80的客户', sessions: '会话', newSession: '新建会话', deleteSession: '删除会话', sessionName: '会话名称', addLead: '添加线索', addLeadTitle: '手动添加线索', createLead: '创建线索', createLeadSuccess: '线索创建成功', createLeadFailed: '线索创建失败', nameVerticalRequired: 'Name 和 Vertical 必填',
   },
   en: {
-    title: 'PingComp', subtitle: 'Lead ops workspace', agent: 'Agent', dashboard: 'Dashboard', leads: 'Leads', interviews: 'Interviews', enrich: 'Enrich Queue', outreach: 'Outreach Center', emails: 'Emails', leadId: 'Lead ID', email: 'Email', from: 'From', to: 'To', sentAt: 'Sent At', subject: 'Subject', sender: 'Sender', content: 'Content', apply: 'Apply', reset: 'Reset', loading: 'loading…',
+    title: 'PingComp', subtitle: 'Lead ops workspace', agent: 'Agent', dashboard: 'Dashboard', leads: 'Leads', interviews: 'Interviews', enrich: 'Enrich Queue', outreach: 'Outreach Center', emails: 'Emails', leadId: 'Lead ID', email: 'Email', from: 'From', to: 'To', sentAt: 'Sent At', subject: 'Subject', sender: 'Sender', content: 'Content',
     filter: 'Filter', reset: 'Reset', search: 'Search name/owner/vertical/source/tags', minScore: 'Min score', status: 'Status', region: 'Country/Region', creator: 'Creator', pageSize: 'Page size',
     page: 'Page', lockOnly: 'Locked only', prev: 'Prev', next: 'Next', edit: 'Edit', saveLock: 'Save & lock', total: 'Total leads',
     locked: 'Manual locked', avg: 'Avg score', lockRate: 'Lock ratio', exportCsv: 'Export CSV', runBatch: 'Run batch (20)',
@@ -99,6 +99,22 @@ function useLocalLang() {
 }
 
 const scoreColor = (v: number) => (v >= 75 ? 'green' : v >= 50 ? 'yellow' : 'red');
+
+const STATUS_BADGE: Record<string, { color: string }> = {
+  new: { color: 'blue' },
+  contacted: { color: 'orange' },
+  qualified: { color: 'green' },
+  disqualified: { color: 'red' },
+};
+const StatusBadge = ({ s }: { s: string }) => {
+  const cfg = STATUS_BADGE[s] || { color: 'gray' };
+  return <Badge color={cfg.color} variant="light" size="sm" style={{ textTransform: 'capitalize' }}>{s}</Badge>;
+};
+
+const ENRICH_STATUS_COLOR: Record<string, string> = { pending: 'yellow', running: 'blue', done: 'green', failed: 'red' };
+const EnrichStatusBadge = ({ s }: { s: string }) => (
+  <Badge color={ENRICH_STATUS_COLOR[s] || 'gray'} variant="light" size="sm">{s}</Badge>
+);
 
 
 function PieMini({ labels, values }: { labels: string[]; values: number[] }) {
@@ -787,11 +803,19 @@ export function App() {
                 </Menu.Dropdown>
               </Menu>
               {me ? (
-                <Group gap={8}>
-                  <Avatar src={me.picture} size={24} radius="xl" />
-                  <Text size="sm" c="dimmed">{me.name || me.email}</Text>
-                  <Button component="a" href="/logout" variant="subtle" size="xs">{t.logout}</Button>
-                </Group>
+                <Menu shadow="md" width={200} position="bottom-end">
+                  <Menu.Target>
+                    <Group gap={8} style={{ cursor: 'pointer' }}>
+                      <Avatar src={me.picture} size={28} radius="xl" />
+                      <Text size="sm" c="dimmed" style={{ maxWidth: 140 }} lineClamp={1}>{me.name || me.email}</Text>
+                    </Group>
+                  </Menu.Target>
+                  <Menu.Dropdown>
+                    <Menu.Label>{me.email}</Menu.Label>
+                    <Menu.Divider />
+                    <Menu.Item component="a" href="/logout" color="red">{t.logout}</Menu.Item>
+                  </Menu.Dropdown>
+                </Menu>
               ) : null}
             </Group>
           </Group>
@@ -825,7 +849,7 @@ export function App() {
                   <ScrollArea style={{ flex: 1 }} offsetScrollbars scrollbarSize={10}>
                     <Stack gap="sm" pr="sm">
                       {agentTurns.map((t0, i) => (
-                        <Paper key={i} p="sm" radius="md" withBorder style={{ alignSelf: t0.role === 'user' ? 'flex-end' : 'flex-start', maxWidth: '86%', background: t0.role === 'user' ? (computedColorScheme === 'dark' ? 'rgba(59,130,246,.22)' : 'rgba(59,130,246,.12)') : undefined }}>
+                        <Paper key={i} p="sm" radius="md" withBorder style={{ alignSelf: t0.role === 'user' ? 'flex-end' : 'flex-start', maxWidth: '86%', background: t0.role === 'user' ? (computedColorScheme === 'dark' ? 'rgba(59,130,246,.22)' : 'rgba(59,130,246,.1)') : undefined, borderLeft: t0.role === 'assistant' ? '3px solid var(--mantine-color-blue-5)' : undefined }}>
                           <Text size="sm">{t0.text}</Text>
                           {t0.chart ? (
                             <Paper mt="xs" p="sm" withBorder radius="sm">
@@ -887,6 +911,11 @@ export function App() {
                     <Button variant="subtle" onClick={() => { setQ(''); setMinScore(0); setStatus(null); setRegion(null); setLockedOnly(false); setPage(1); setShowMoreFilters(false); }}>{t.reset}</Button>
                   </Group>
                   <Group gap={8}>
+                    <Tooltip label={compactMode ? 'Comfortable view' : 'Compact view'} withArrow>
+                      <ActionIcon variant="default" size="lg" onClick={() => setCompactMode(v => !v)}>
+                        <IconLayoutGrid size={16} />
+                      </ActionIcon>
+                    </Tooltip>
                     <Button onClick={() => { setCreateLeadDraft((d: any) => ({ ...d, creator: d.creator || me?.email || '' })); setCreateLeadOpen(true); }} leftSection={<IconPlus size={14} />}>{t.addLead}</Button>
                     <Button component="a" href="/api/export.csv" variant="light" leftSection={<IconDownload size={14} />}>{t.exportCsv}</Button>
                   </Group>
@@ -970,7 +999,7 @@ export function App() {
                               ? '-'
                               : <Badge color={scoreColor(r.tidb_potential_score)} style={{ minWidth: 36, justifyContent: 'center' }}>{r.tidb_potential_score}</Badge>}
                           </Table.Td>
-                          <Table.Td style={{ paddingTop: compactMode ? 6 : 10, paddingBottom: compactMode ? 6 : 10 }}>{r.lead_status}</Table.Td>
+                          <Table.Td style={{ paddingTop: compactMode ? 6 : 10, paddingBottom: compactMode ? 6 : 10 }}><StatusBadge s={r.lead_status} /></Table.Td>
                           <Table.Td style={{ paddingTop: compactMode ? 6 : 10, paddingBottom: compactMode ? 6 : 10 }}>{r.owner || '-'}</Table.Td>
                           <Table.Td style={{ paddingTop: compactMode ? 6 : 10, paddingBottom: compactMode ? 6 : 10, maxWidth: 240 }}>
                             <Tooltip multiline w={480} withArrow label={(String(r.emails || '')).split(',').join(', ') || '-'}>
@@ -1156,9 +1185,10 @@ export function App() {
                   </Table>
                 </ScrollArea>
 
-                <Group mt="sm" justify="space-between">
-                  <Text size="xs" c="dimmed">cursor: {interviewsCursor || '-'}</Text>
-                  <Button variant="default" disabled={!interviewsCursor || interviewsLoading} onClick={() => loadInterviews({ reset: false })}>Load more</Button>
+                <Group mt="sm" justify="flex-end">
+                  <Button variant="default" disabled={!interviewsCursor || interviewsLoading} onClick={() => loadInterviews({ reset: false })}>
+                    {interviewsCursor ? 'Load more' : 'All loaded'}
+                  </Button>
                 </Group>
               </Paper>
             </Box>
@@ -1167,10 +1197,34 @@ export function App() {
           <Tabs.Panel value="enrich" pt="md">
             <Box px="xs">
               <SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }} spacing="md">
-                <Card withBorder radius="md"><Text size="sm" c="dimmed">Pending</Text><Title order={3}>{enrich?.stats?.pending ?? 0}</Title></Card>
-                <Card withBorder radius="md"><Text size="sm" c="dimmed">Running</Text><Title order={3}>{enrich?.stats?.running ?? 0}</Title></Card>
-                <Card withBorder radius="md"><Text size="sm" c="dimmed">Done</Text><Title order={3}>{enrich?.stats?.done_count ?? 0}</Title></Card>
-                <Card withBorder radius="md"><Text size="sm" c="dimmed">Failed</Text><Title order={3}>{enrich?.stats?.failed ?? 0}</Title></Card>
+                <Card withBorder radius="md" p="lg">
+                  <Group justify="space-between" mb="xs">
+                    <Text size="sm" c="dimmed" fw={500}>Pending</Text>
+                    <ThemeIcon variant="light" color="yellow" size="lg" radius="md"><IconClock size={18} /></ThemeIcon>
+                  </Group>
+                  <Title order={2} fw={800}>{enrich?.stats?.pending ?? 0}</Title>
+                </Card>
+                <Card withBorder radius="md" p="lg">
+                  <Group justify="space-between" mb="xs">
+                    <Text size="sm" c="dimmed" fw={500}>Running</Text>
+                    <ThemeIcon variant="light" color="blue" size="lg" radius="md"><IconActivity size={18} /></ThemeIcon>
+                  </Group>
+                  <Title order={2} fw={800}>{enrich?.stats?.running ?? 0}</Title>
+                </Card>
+                <Card withBorder radius="md" p="lg">
+                  <Group justify="space-between" mb="xs">
+                    <Text size="sm" c="dimmed" fw={500}>Done</Text>
+                    <ThemeIcon variant="light" color="green" size="lg" radius="md"><IconCheck size={18} /></ThemeIcon>
+                  </Group>
+                  <Title order={2} fw={800}>{enrich?.stats?.done_count ?? 0}</Title>
+                </Card>
+                <Card withBorder radius="md" p="lg">
+                  <Group justify="space-between" mb="xs">
+                    <Text size="sm" c="dimmed" fw={500}>Failed</Text>
+                    <ThemeIcon variant="light" color="red" size="lg" radius="md"><IconX size={18} /></ThemeIcon>
+                  </Group>
+                  <Title order={2} fw={800}>{enrich?.stats?.failed ?? 0}</Title>
+                </Card>
               </SimpleGrid>
 
               <Paper withBorder p="md" radius="md" mt="md">
@@ -1189,7 +1243,7 @@ export function App() {
                     </Table.Thead>
                     <Table.Tbody>
                       {(enrich?.rows || []).map((r) => (
-                        <Table.Tr key={r.id} style={recentEditedIds.has(r.id) ? { background: 'rgba(34,197,94,0.12)', transition: 'background 220ms ease' } : { transition: 'background 220ms ease' }}><Table.Td style={{ paddingTop: 6, paddingBottom: 6 }}>{r.id}</Table.Td><Table.Td>{r.lead_id}</Table.Td><Table.Td>{r.name || ''}</Table.Td><Table.Td>{r.status}</Table.Td><Table.Td>{r.attempts}</Table.Td><Table.Td>{r.updated_at || ''}</Table.Td></Table.Tr>
+                        <Table.Tr key={r.id} style={recentEditedIds.has(r.id) ? { background: 'rgba(34,197,94,0.12)', transition: 'background 220ms ease' } : { transition: 'background 220ms ease' }}><Table.Td style={{ paddingTop: 6, paddingBottom: 6 }}>{r.id}</Table.Td><Table.Td>{r.lead_id}</Table.Td><Table.Td>{r.name || ''}</Table.Td><Table.Td><EnrichStatusBadge s={r.status} /></Table.Td><Table.Td>{r.attempts}</Table.Td><Table.Td>{r.updated_at || ''}</Table.Td></Table.Tr>
                       ))}
                     </Table.Tbody>
                   </Table>
@@ -1201,24 +1255,57 @@ export function App() {
           <Tabs.Panel value="dashboard" pt="md">
             <Box px="xs">
               <SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }} spacing="md">
-                <Card withBorder shadow="sm" radius="md" style={{ transition: 'transform .18s ease, box-shadow .18s ease' }}><Text size="sm" c="dimmed">{t.total}</Text><Title order={3} fw={700}>{dash?.total ?? '-'}</Title></Card>
-                <Card withBorder shadow="sm" radius="md" style={{ transition: 'transform .18s ease, box-shadow .18s ease' }}><Text size="sm" c="dimmed">{t.locked}</Text><Title order={3} fw={700}>{dash?.locked ?? '-'}</Title></Card>
-                <Card withBorder shadow="sm" radius="md" style={{ transition: 'transform .18s ease, box-shadow .18s ease' }}><Text size="sm" c="dimmed">{t.avg}</Text><Title order={3} fw={700}>{dash?.avgScore ?? '-'}</Title></Card>
-                <Card withBorder shadow="sm" radius="md" style={{ transition: 'transform .18s ease, box-shadow .18s ease' }}><Text size="sm" c="dimmed">{t.lockRate}</Text><Title order={3} fw={700}>{dash?.total ? Math.round((dash.locked / dash.total) * 100) : 0}%</Title></Card>
+                <Card withBorder shadow="sm" radius="md" p="lg" style={{ transition: 'transform .18s ease, box-shadow .18s ease' }}>
+                  <Group justify="space-between" mb="xs">
+                    <Text size="sm" c="dimmed" fw={500}>{t.total}</Text>
+                    <ThemeIcon variant="light" color="blue" size="lg" radius="md"><IconUsers size={18} /></ThemeIcon>
+                  </Group>
+                  <Title order={2} fw={800}>{dash?.total ?? '-'}</Title>
+                </Card>
+                <Card withBorder shadow="sm" radius="md" p="lg" style={{ transition: 'transform .18s ease, box-shadow .18s ease' }}>
+                  <Group justify="space-between" mb="xs">
+                    <Text size="sm" c="dimmed" fw={500}>{t.locked}</Text>
+                    <ThemeIcon variant="light" color="violet" size="lg" radius="md"><IconLock size={18} /></ThemeIcon>
+                  </Group>
+                  <Title order={2} fw={800}>{dash?.locked ?? '-'}</Title>
+                </Card>
+                <Card withBorder shadow="sm" radius="md" p="lg" style={{ transition: 'transform .18s ease, box-shadow .18s ease' }}>
+                  <Group justify="space-between" mb="xs">
+                    <Text size="sm" c="dimmed" fw={500}>{t.avg}</Text>
+                    <ThemeIcon variant="light" color="teal" size="lg" radius="md"><IconGauge size={18} /></ThemeIcon>
+                  </Group>
+                  <Title order={2} fw={800}>{dash?.avgScore ?? '-'}</Title>
+                </Card>
+                <Card withBorder shadow="sm" radius="md" p="lg" style={{ transition: 'transform .18s ease, box-shadow .18s ease' }}>
+                  <Group justify="space-between" mb="xs">
+                    <Text size="sm" c="dimmed" fw={500}>{t.lockRate}</Text>
+                    <ThemeIcon variant="light" color="orange" size="lg" radius="md"><IconPercentage size={18} /></ThemeIcon>
+                  </Group>
+                  <Title order={2} fw={800}>{dash?.total ? Math.round((dash.locked / dash.total) * 100) : 0}%</Title>
+                </Card>
               </SimpleGrid>
 
               <SimpleGrid cols={{ base: 1, lg: 3 }} spacing="md" mt="md">
-                <Card withBorder radius="md">
-                  <Title order={4} mb="sm">{t.trend7d}</Title>
+                <Card withBorder radius="md" p="lg">
+                  <Group gap={8} mb="sm">
+                    <ThemeIcon variant="light" color="blue" size="md" radius="md"><IconActivity size={14} /></ThemeIcon>
+                    <Title order={5}>{t.trend7d}</Title>
+                  </Group>
                   <TrendSparkline data={dash?.dailyTrend || []} />
                   <Text size="xs" c="dimmed" mt={6}>{(dash?.dailyTrend || []).map(x => `${x.d.slice(5)}:${x.c}`).join(' · ')}</Text>
                 </Card>
-                <Card withBorder radius="md">
-                  <Title order={4} mb="sm">{t.scoreDist}</Title>
+                <Card withBorder radius="md" p="lg">
+                  <Group gap={8} mb="sm">
+                    <ThemeIcon variant="light" color="teal" size="md" radius="md"><IconGauge size={14} /></ThemeIcon>
+                    <Title order={5}>{t.scoreDist}</Title>
+                  </Group>
                   <HorizontalBars rows={(dash?.scoreBuckets || []).map(x => ({ k: x.bucket, v: x.c }))} />
                 </Card>
-                <Card withBorder radius="md">
-                  <Title order={4} mb="sm">{t.enrichDist}</Title>
+                <Card withBorder radius="md" p="lg">
+                  <Group gap={8} mb="sm">
+                    <ThemeIcon variant="light" color="violet" size="md" radius="md"><IconBolt size={14} /></ThemeIcon>
+                    <Title order={5}>{t.enrichDist}</Title>
+                  </Group>
                   <HorizontalBars rows={(dash?.enrichRows || []).map(x => ({ k: x.enrich_status || 'unknown', v: x.c }))} />
                 </Card>
               </SimpleGrid>
@@ -1388,9 +1475,10 @@ export function App() {
               </Table>
             </ScrollArea>
 
-            <Group justify="space-between" mt="sm">
-              <Text size="xs" c="dimmed">cursor: {leadInterviewsCursor || '-'}</Text>
-              <Button variant="default" disabled={!leadInterviewsCursor || leadInterviewsLoading} onClick={() => loadLeadInterviews({ reset: false })}>Load more</Button>
+            <Group justify="flex-end" mt="sm">
+              <Button variant="default" disabled={!leadInterviewsCursor || leadInterviewsLoading} onClick={() => loadLeadInterviews({ reset: false })}>
+                {leadInterviewsCursor ? 'Load more' : 'All loaded'}
+              </Button>
             </Group>
           </Stack>
         ) : null}
