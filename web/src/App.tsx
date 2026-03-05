@@ -80,7 +80,7 @@ const I18N = {
     lockOnly: '仅锁定', prev: '上一页', next: '下一页', edit: '编辑', saveLock: '保存并锁定', total: '总线索',
     locked: '人工锁定', avg: '平均分', lockRate: '锁定占比', exportCsv: '导出CSV', runBatch: '执行一轮(20条)',
     enqueue: '入队', noData: '暂无数据', loading: '加载中…', trend7d: '近7天更新趋势', scoreDist: '评分分布', enrichDist: 'Enrich状态',
-    bulkAction: '批量动作', apply: '执行', selected: '已选', quickViews: '快捷视图', savedViews: '已保存视图', saveView: '保存当前视图', deleteView: '删除视图', viewName: '视图名', account: '账户', logout: '退出', delete: '删除', deleteConfirm: '确认删除该线索？', deleteModalTitle: '确认删除', deleteModalDesc: '删除后不可恢复，请确认操作。', cancel: '取消', confirmDelete: '确认删除', askAgent: '问问 Agent', askPlaceholder: '例如：找出 owner 为某人、分数大于80的客户', sessions: '会话', newSession: '新建会话', deleteSession: '删除会话', sessionName: '会话名称',
+    bulkAction: '批量动作', apply: '执行', selected: '已选', quickViews: '快捷视图', savedViews: '已保存视图', saveView: '保存当前视图', deleteView: '删除视图', viewName: '视图名', account: '账户', logout: '退出', delete: '删除', deleteConfirm: '确认删除该线索？', deleteModalTitle: '确认删除', deleteModalDesc: '删除后不可恢复，请确认操作。', cancel: '取消', confirmDelete: '确认删除', askAgent: '问问 Agent', askPlaceholder: '例如：找出 owner 为某人、分数大于80的客户', sessions: '会话', newSession: '新建会话', deleteSession: '删除会话', sessionName: '会话名称', addLead: '添加线索', addLeadTitle: '手动添加线索', createLead: '创建线索', createLeadSuccess: '线索创建成功', createLeadFailed: '线索创建失败', nameVerticalRequired: 'Name 和 Vertical 必填',
   },
   en: {
     title: 'PingComp', subtitle: 'Lead ops workspace', agent: 'Agent', dashboard: 'Dashboard', leads: 'Leads', interviews: 'Interviews', enrich: 'Enrich Queue', outreach: 'Outreach Center', emails: 'Emails', leadId: 'Lead ID', email: 'Email', from: 'From', to: 'To', sentAt: 'Sent At', subject: 'Subject', sender: 'Sender', content: 'Content', apply: 'Apply', reset: 'Reset', loading: 'loading…',
@@ -88,7 +88,7 @@ const I18N = {
     page: 'Page', lockOnly: 'Locked only', prev: 'Prev', next: 'Next', edit: 'Edit', saveLock: 'Save & lock', total: 'Total leads',
     locked: 'Manual locked', avg: 'Avg score', lockRate: 'Lock ratio', exportCsv: 'Export CSV', runBatch: 'Run batch (20)',
     enqueue: 'Enqueue', noData: 'No data', loading: 'Loading…', trend7d: '7-day update trend', scoreDist: 'Score distribution', enrichDist: 'Enrich status',
-    bulkAction: 'Bulk action', apply: 'Apply', selected: 'Selected', quickViews: 'Quick views', savedViews: 'Saved views', saveView: 'Save current view', deleteView: 'Delete view', viewName: 'View name', account: 'Account', logout: 'Logout', delete: 'Delete', deleteConfirm: 'Delete this lead?', deleteModalTitle: 'Confirm deletion', deleteModalDesc: 'This operation cannot be undone.', cancel: 'Cancel', confirmDelete: 'Delete', askAgent: 'Ask Agent', askPlaceholder: 'e.g. find leads with score >= 80 and a specific owner', sessions: 'Sessions', newSession: 'New Session', deleteSession: 'Delete Session', sessionName: 'Session Name',
+    bulkAction: 'Bulk action', apply: 'Apply', selected: 'Selected', quickViews: 'Quick views', savedViews: 'Saved views', saveView: 'Save current view', deleteView: 'Delete view', viewName: 'View name', account: 'Account', logout: 'Logout', delete: 'Delete', deleteConfirm: 'Delete this lead?', deleteModalTitle: 'Confirm deletion', deleteModalDesc: 'This operation cannot be undone.', cancel: 'Cancel', confirmDelete: 'Delete', askAgent: 'Ask Agent', askPlaceholder: 'e.g. find leads with score >= 80 and a specific owner', sessions: 'Sessions', newSession: 'New Session', deleteSession: 'Delete Session', sessionName: 'Session Name', addLead: 'Add Lead', addLeadTitle: 'Create Lead', createLead: 'Create Lead', createLeadSuccess: 'Lead created', createLeadFailed: 'Failed to create lead', nameVerticalRequired: 'Name and Vertical are required',
   },
 } as const;
 
@@ -214,6 +214,12 @@ export function App() {
   const [totalPages, setTotalPages] = useState(1);
   const [totalRows, setTotalRows] = useState(0);
   const [selected, setSelected] = useState<Lead | null>(null);
+  const [createLeadOpen, setCreateLeadOpen] = useState(false);
+  const [createLeadSubmitting, setCreateLeadSubmitting] = useState(false);
+  const [createLeadDraft, setCreateLeadDraft] = useState<any>({
+    name: '', vertical: '', region: '', city: '', source: 'manual',
+    lead_status: 'new', owner: '', emails: '', tidb_potential_score: 0, tidb_potential_reason: '',
+  });
   const [loading, setLoading] = useState(false);
   const [agentInput, setAgentInput] = useState('');
   const [agentLoading, setAgentLoading] = useState(false);
@@ -555,6 +561,41 @@ export function App() {
     await Promise.all([loadLeads(), loadDashboard()]);
   }
 
+  async function createLead() {
+    const name = String(createLeadDraft.name || '').trim();
+    const vertical = String(createLeadDraft.vertical || '').trim();
+    if (!name || !vertical) {
+      window.alert(t.nameVerticalRequired);
+      return;
+    }
+    setCreateLeadSubmitting(true);
+    try {
+      const payload = {
+        name,
+        vertical,
+        region: String(createLeadDraft.region || '').trim(),
+        city: String(createLeadDraft.city || '').trim(),
+        source: String(createLeadDraft.source || 'manual').trim() || 'manual',
+        lead_status: String(createLeadDraft.lead_status || 'new').trim() || 'new',
+        owner: String(createLeadDraft.owner || '').trim() || null,
+        emails: String(createLeadDraft.emails || ''),
+        tidb_potential_score: Number(createLeadDraft.tidb_potential_score || 0),
+        tidb_potential_reason: String(createLeadDraft.tidb_potential_reason || ''),
+      };
+      const r = await fetch('/api/leads', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+      const j = await r.json();
+      if (!r.ok || !j?.ok) throw new Error(j?.error || 'create failed');
+      setCreateLeadOpen(false);
+      setCreateLeadDraft({ name: '', vertical: '', region: '', city: '', source: 'manual', lead_status: 'new', owner: '', emails: '', tidb_potential_score: 0, tidb_potential_reason: '' });
+      markRecentEdited([Number(j.id)]);
+      await Promise.all([loadLeads(), loadDashboard()]);
+    } catch (e: any) {
+      window.alert(`${t.createLeadFailed}: ${e?.message || e}`);
+    } finally {
+      setCreateLeadSubmitting(false);
+    }
+  }
+
   async function applyBulk() {
     if (!bulkAction || selectedIds.size === 0) return;
     if (bulkAction === 'delete') {
@@ -823,6 +864,7 @@ export function App() {
                     <Button variant="default" onClick={() => setShowMoreFilters(v => !v)}>{showMoreFilters ? 'Less' : 'More'}</Button>
                     <Button variant="subtle" onClick={() => { setQ(''); setMinScore(0); setStatus(null); setRegion(null); setLockedOnly(false); setPage(1); setShowMoreFilters(false); }}>{t.reset}</Button>
                   </Group>
+                  <Button variant="default" onClick={() => setCreateLeadOpen(true)}>{t.addLead}</Button>
                   <Button component="a" href="/api/export.csv" variant="light" leftSection={<IconDownload size={14} />}>{t.exportCsv}</Button>
                 </Group>
 
@@ -1170,6 +1212,29 @@ export function App() {
           <Anchor href="https://openclaw.ai" target="_blank" rel="noreferrer" underline="hover" style={{ color: 'var(--mantine-color-violet-4)' }}>OpenClaw</Anchor>
         </Text>
       </Group>
+
+      <Modal opened={createLeadOpen} onClose={() => setCreateLeadOpen(false)} title={t.addLeadTitle} size="lg">
+        <Stack>
+          <TextInput label="Name" value={createLeadDraft.name} onChange={(e) => setCreateLeadDraft({ ...createLeadDraft, name: e.currentTarget.value })} />
+          <TextInput label="Vertical" value={createLeadDraft.vertical} onChange={(e) => setCreateLeadDraft({ ...createLeadDraft, vertical: e.currentTarget.value })} />
+          <Group grow>
+            <TextInput label="Region" value={createLeadDraft.region} onChange={(e) => setCreateLeadDraft({ ...createLeadDraft, region: e.currentTarget.value })} />
+            <TextInput label="City" value={createLeadDraft.city} onChange={(e) => setCreateLeadDraft({ ...createLeadDraft, city: e.currentTarget.value })} />
+          </Group>
+          <Group grow>
+            <TextInput label="Source" value={createLeadDraft.source} onChange={(e) => setCreateLeadDraft({ ...createLeadDraft, source: e.currentTarget.value })} />
+            <Select label="Status" data={statusOptions} value={createLeadDraft.lead_status} onChange={(v) => setCreateLeadDraft({ ...createLeadDraft, lead_status: v || 'new' })} />
+            <TextInput label="Owner" value={createLeadDraft.owner} onChange={(e) => setCreateLeadDraft({ ...createLeadDraft, owner: e.currentTarget.value })} />
+          </Group>
+          <Textarea label={(t as any).emails || 'Emails'} minRows={3} value={createLeadDraft.emails} onChange={(e) => setCreateLeadDraft({ ...createLeadDraft, emails: e.currentTarget.value })} />
+          <NumberInput label="Score" min={0} max={100} value={createLeadDraft.tidb_potential_score} onChange={(v: any) => setCreateLeadDraft({ ...createLeadDraft, tidb_potential_score: Number(v || 0) })} />
+          <Textarea label="Reason" minRows={6} value={createLeadDraft.tidb_potential_reason} onChange={(e) => setCreateLeadDraft({ ...createLeadDraft, tidb_potential_reason: e.currentTarget.value })} />
+          <Group justify="flex-end">
+            <Button variant="default" onClick={() => setCreateLeadOpen(false)}>{t.cancel}</Button>
+            <Button loading={createLeadSubmitting} onClick={createLead}>{t.createLead}</Button>
+          </Group>
+        </Stack>
+      </Modal>
 
       <Modal opened={!!selected} onClose={() => setSelected(null)} title={selected?.name || t.edit} size="lg">
         {selected && (

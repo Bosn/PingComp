@@ -596,6 +596,44 @@ app.get('/interviews/export.md', ensureAuthForNonApi, async (req: Request, res: 
   }
 });
 
+app.post('/api/leads', async (req: Request, res: Response) => {
+  const b: any = req.body || {};
+  const name = String(b.name || '').trim();
+  const vertical = String(b.vertical || '').trim();
+  if (!name) return res.status(400).json({ ok: false, error: 'missing name' });
+  if (!vertical) return res.status(400).json({ ok: false, error: 'missing vertical' });
+
+  const emails = normalizeEmails(b.emails || '').join(',') || null;
+  const source = String(b.source || 'manual').trim() || 'manual';
+  const leadStatus = String(b.lead_status || 'new').trim() || 'new';
+  const owner = String(b.owner || '').trim() || null;
+  const region = String(b.region || '').trim();
+  const city = String(b.city || '').trim();
+  const scoreRaw = Number(b.tidb_potential_score);
+  const score = Number.isFinite(scoreRaw) ? Math.max(0, Math.min(100, scoreRaw)) : null;
+  const reason = String(b.tidb_potential_reason || '').trim();
+  const actor = getActor(req);
+
+  const conn = await getConn();
+  try {
+    const [ret]: any = await conn.execute(
+      `INSERT INTO \`${TABLE}\`
+      (name, region, city, vertical, source, tidb_potential_score, tidb_potential_reason, lead_status, owner, manual_locked, emails, enrich_status, manual_updated_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, 'pending', NOW(), NOW())`,
+      [name, region || null, city || null, vertical, source, score, reason, leadStatus, owner, emails]
+    );
+
+    const id = Number(ret?.insertId || 0);
+    if (id > 0) {
+      const [rows]: any = await conn.query(`SELECT * FROM \`${TABLE}\` WHERE id=?`, [id]);
+      await logActivity(conn, id, 'api_manual_create', actor, null, rows?.[0] || null);
+    }
+    return res.json({ ok: true, id });
+  } finally {
+    await conn.end();
+  }
+});
+
 app.get('/api/leads', async (req: Request, res: Response) => {
   const q = String(req.query.q || '').trim();
   const min = Number(req.query.minScore || 0);
