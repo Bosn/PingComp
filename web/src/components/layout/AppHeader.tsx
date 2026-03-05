@@ -48,10 +48,10 @@ export function AppHeader({ t, lang, setLang, me }: AppHeaderProps) {
           position: 'absolute',
           inset: 0,
           background: isDark
-            ? 'linear-gradient(120deg, rgba(59,130,246,0.15), rgba(139,92,246,0.12), rgba(6,182,212,0.10), rgba(59,130,246,0.15))'
-            : 'linear-gradient(120deg, rgba(59,130,246,0.08), rgba(139,92,246,0.06), rgba(6,182,212,0.05), rgba(59,130,246,0.08))',
-          backgroundSize: '240% 240%',
-          animation: 'pcBannerGradientDrift 34s ease-in-out infinite',
+            ? 'linear-gradient(120deg, rgba(59,130,246,0.22), rgba(139,92,246,0.18), rgba(6,182,212,0.14), rgba(59,130,246,0.22))'
+            : 'linear-gradient(120deg, rgba(59,130,246,0.14), rgba(139,92,246,0.11), rgba(6,182,212,0.09), rgba(59,130,246,0.14))',
+          backgroundSize: '280% 280%',
+          animation: 'pcBannerGradientDrift 30s ease-in-out infinite',
           willChange: 'background-position, opacity',
           pointerEvents: 'none',
         }}

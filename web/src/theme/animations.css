@@ -20,9 +20,9 @@
 }
 
 @keyframes pcBannerGradientDrift {
-  0% { background-position: 46% 48%; opacity: 0.92; }
-  50% { background-position: 54% 52%; opacity: 1; }
-  100% { background-position: 46% 48%; opacity: 0.92; }
+  0% { background-position: 38% 46%; opacity: 0.9; }
+  50% { background-position: 62% 54%; opacity: 1; }
+  100% { background-position: 38% 46%; opacity: 0.9; }
 }
 
 @keyframes pcBounce {
@@ -74,8 +74,17 @@
 }
 
 /* Tab gradient underline */
+.pc-tab-list [role="tab"] {
+  border-bottom-width: 0 !important;
+}
 .pc-tab-list [data-active] {
   position: relative;
+  border-bottom-color: transparent !important;
+  box-shadow: none !important;
+}
+.pc-tab-list [data-active]::before {
+  display: none !important;
+  content: none !important;
 }
 .pc-tab-list [data-active]::after {
   content: '';
