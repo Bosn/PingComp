@@ -1,6 +1,8 @@
 import express, { type NextFunction, type Request, type Response } from 'express';
 import dotenv from 'dotenv';
 import { auth } from 'express-openid-connect';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import { getConn, migrate, TABLE } from './db.js';
 import { htmlToPlain } from './utils/htmlToPlain.js';
 import { getSendGridConfigError, isSendGridEnabled, sendViaSendGrid } from './services/sendgrid.js';
@@ -8,6 +10,16 @@ import { getSendGridConfigError, isSendGridEnabled, sendViaSendGrid } from './se
 dotenv.config();
 const app = express();
 const port = Number(process.env.PORT || 3788);
+const execFileAsync = promisify(execFile);
+
+function extractJsonObject(raw: string): any | null {
+  const t = String(raw || '').trim();
+  if (!t) return null;
+  try { return JSON.parse(t); } catch {}
+  const m = t.match(/\{[\s\S]*\}$/);
+  if (!m) return null;
+  try { return JSON.parse(m[0]); } catch { return null; }
+}
 
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
@@ -1205,6 +1217,47 @@ app.post('/api/agent/chat', async (req: Request, res: Response) => {
     });
   }
 
+  // Preferred backend: OpenClaw agent (e.g. pingcomp-sandbox)
+  // Env:
+  // - AGENT_BACKEND=openclaw|qwen (default: openclaw)
+  // - OPENCLAW_AGENT_ID=pingcomp-sandbox
+  // - OPENCLAW_AGENT_TIMEOUT=120
+  // - OPENCLAW_AGENT_STRICT=true (fail fast instead of qwen fallback)
+  const agentBackend = String(process.env.AGENT_BACKEND || 'openclaw').trim().toLowerCase();
+  if (agentBackend === 'openclaw') {
+    const openclawAgentId = String(process.env.OPENCLAW_AGENT_ID || 'pingcomp-sandbox').trim();
+    const openclawTimeout = Number(process.env.OPENCLAW_AGENT_TIMEOUT || 120);
+    const strictEnv = String(process.env.OPENCLAW_AGENT_STRICT || 'true').toLowerCase();
+    const strict = strictEnv === 'true' || strictEnv === '1' || strictEnv === 'yes';
+
+    try {
+      const { stdout } = await execFileAsync('openclaw', [
+        '--no-color',
+        'agent',
+        '--agent', openclawAgentId,
+        '--message', message,
+        '--json',
+        '--timeout', String(Number.isFinite(openclawTimeout) ? openclawTimeout : 120),
+      ], { maxBuffer: 4 * 1024 * 1024 });
+
+      const parsed = extractJsonObject(stdout || '');
+      const payloads = parsed?.result?.payloads;
+      const reply = Array.isArray(payloads)
+        ? String(payloads.map((p: any) => String(p?.text || '')).join('\n').trim())
+        : String(parsed?.reply || parsed?.result?.reply || '').trim();
+
+      if (!reply) throw new Error('openclaw_empty_reply');
+      await conn.end();
+      return res.json({ ok: true, mode: 'openclaw-agent', rows: [], sqlUsed: null, llmError: null, reply });
+    } catch (e: any) {
+      const err = String(e?.stderr || e?.stdout || e?.message || e || 'openclaw_agent_error').slice(0, 500);
+      if (strict) {
+        await conn.end();
+        return res.status(502).json({ ok: false, mode: 'openclaw-agent', error: err });
+      }
+      // Non-strict mode: fallback to original Qwen/rule pipeline below.
+    }
+  }
 
   const runQwen = async (system: string, user: string) => {
     if (!qwenKey) throw new Error('missing_qwen_api_key');
