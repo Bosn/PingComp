@@ -196,6 +196,34 @@ function normalizeEmails(input) {
     }
     return out;
 }
+function normalizeLeadName(input) {
+    return String(input ?? '').trim().replace(/\s+/g, ' ');
+}
+function isDuplicateEntryError(err) {
+    return err?.code === 'ER_DUP_ENTRY' || Number(err?.errno) === 1062;
+}
+function leadNameConflictPayload(name) {
+    return {
+        ok: false,
+        code: 'LEAD_NAME_DUPLICATE',
+        error: `Lead name "${name}" already exists`,
+    };
+}
+async function findLeadIdByName(conn, name, excludeId) {
+    const normalized = normalizeLeadName(name);
+    if (!normalized)
+        return null;
+    const args = [normalized];
+    let sql = `SELECT id FROM \`${TABLE}\` WHERE TRIM(LOWER(name)) = TRIM(LOWER(?))`;
+    if (Number.isFinite(excludeId) && Number(excludeId) > 0) {
+        sql += ' AND id <> ?';
+        args.push(Number(excludeId));
+    }
+    sql += ' ORDER BY id ASC LIMIT 1';
+    const [rows] = await conn.query(sql, args);
+    const id = Number(rows?.[0]?.id || 0);
+    return id > 0 ? id : null;
+}
 // -------- API --------
 // Interviews v1 (M2 scaffold + core create/update/read/delete)
 app.post('/api/interviews', async (req, res) => {
@@ -588,7 +616,7 @@ app.get('/interviews/export.md', ensureAuthForNonApi, async (req, res) => {
 });
 app.post('/api/leads', async (req, res) => {
     const b = req.body || {};
-    const name = String(b.name || '').trim();
+    const name = normalizeLeadName(b.name);
     const vertical = String(b.vertical || '').trim();
     if (!name)
         return res.status(400).json({ ok: false, error: 'missing name' });
@@ -607,15 +635,30 @@ app.post('/api/leads', async (req, res) => {
     const actor = getActor(req);
     const conn = await getConn();
     try {
-        const [ret] = await conn.execute(`INSERT INTO \`${TABLE}\`
-      (name, region, city, vertical, source, tidb_potential_score, tidb_potential_reason, lead_status, owner, creator, manual_locked, emails, enrich_status, manual_updated_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, 'pending', NOW(), NOW())`, [name, region || null, city || null, vertical, source, score, reason, leadStatus, owner, creator, emails]);
+        const existingId = await findLeadIdByName(conn, name);
+        if (existingId)
+            return res.status(409).json(leadNameConflictPayload(name));
+        let ret;
+        try {
+            [ret] = await conn.execute(`INSERT INTO \`${TABLE}\`
+        (name, region, city, vertical, source, tidb_potential_score, tidb_potential_reason, lead_status, owner, creator, manual_locked, emails, enrich_status, manual_updated_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, 'pending', NOW(), NOW())`, [name, region || null, city || null, vertical, source, score, reason, leadStatus, owner, creator, emails]);
+        }
+        catch (err) {
+            if (isDuplicateEntryError(err))
+                return res.status(409).json(leadNameConflictPayload(name));
+            throw err;
+        }
         const id = Number(ret?.insertId || 0);
         if (id > 0) {
             const [rows] = await conn.query(`SELECT * FROM \`${TABLE}\` WHERE id=?`, [id]);
             await logActivity(conn, id, 'api_manual_create', actor, null, rows?.[0] || null);
         }
         return res.json({ ok: true, id });
+    }
+    catch (err) {
+        console.error('create lead failed', err);
+        return res.status(500).json({ ok: false, error: 'failed to create lead' });
     }
     finally {
         await conn.end();
@@ -728,22 +771,46 @@ app.put('/api/leads/:id/emails', async (req, res) => {
 });
 app.put('/api/leads/:id', async (req, res) => {
     const b = req.body || {};
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id) || id <= 0)
+        return res.status(400).json({ ok: false, error: 'invalid id' });
     const conn = await getConn();
-    const [beforeRows] = await conn.query(`SELECT * FROM \`${TABLE}\` WHERE id=?`, [req.params.id]);
-    const beforeRow = beforeRows?.[0] || null;
-    await conn.execute(`UPDATE \`${TABLE}\` SET
-      name=?, region=?, city=?, vertical=?, funding=?, linkedin=?, latest_news=?, source=?,
-      tidb_potential_score=?, tidb_potential_reason=?, manual_note=?, lead_status=?, owner=?, creator=?, tags=?, source_confidence=?, enrich_status=?,
-      manual_locked=1, manual_updated_at=NOW(), updated_at=NOW()
-     WHERE id=?`, [
-        b.name || '', b.region || '', b.city || '', b.vertical || '', b.funding || '', b.linkedin || '', b.latest_news || '', b.source || '',
-        b.tidb_potential_score || null, b.tidb_potential_reason || '', b.manual_note || '', b.lead_status || 'new', b.owner || null, b.creator || null,
-        b.tags || null, b.source_confidence || null, b.enrich_status || 'pending', req.params.id
-    ]);
-    await logActivity(conn, Number(req.params.id), 'api_manual_edit_lock', 'pingcomp-react', beforeRow, b);
-    const [rows] = await conn.query(`SELECT * FROM \`${TABLE}\` WHERE id=?`, [req.params.id]);
-    await conn.end();
-    res.json({ ok: true, row: rows?.[0] || null });
+    try {
+        const [beforeRows] = await conn.query(`SELECT * FROM \`${TABLE}\` WHERE id=?`, [id]);
+        const beforeRow = beforeRows?.[0] || null;
+        const name = normalizeLeadName(b.name || beforeRow?.name || '');
+        if (!name)
+            return res.status(400).json({ ok: false, error: 'missing name' });
+        const existingId = await findLeadIdByName(conn, name, id);
+        if (existingId)
+            return res.status(409).json(leadNameConflictPayload(name));
+        try {
+            await conn.execute(`UPDATE \`${TABLE}\` SET
+          name=?, region=?, city=?, vertical=?, funding=?, linkedin=?, latest_news=?, source=?,
+          tidb_potential_score=?, tidb_potential_reason=?, manual_note=?, lead_status=?, owner=?, creator=?, tags=?, source_confidence=?, enrich_status=?,
+          manual_locked=1, manual_updated_at=NOW(), updated_at=NOW()
+         WHERE id=?`, [
+                name, b.region || '', b.city || '', b.vertical || '', b.funding || '', b.linkedin || '', b.latest_news || '', b.source || '',
+                b.tidb_potential_score || null, b.tidb_potential_reason || '', b.manual_note || '', b.lead_status || 'new', b.owner || null, b.creator || null,
+                b.tags || null, b.source_confidence || null, b.enrich_status || 'pending', id
+            ]);
+        }
+        catch (err) {
+            if (isDuplicateEntryError(err))
+                return res.status(409).json(leadNameConflictPayload(name));
+            throw err;
+        }
+        await logActivity(conn, id, 'api_manual_edit_lock', getActor(req), beforeRow, { ...b, name });
+        const [rows] = await conn.query(`SELECT * FROM \`${TABLE}\` WHERE id=?`, [id]);
+        return res.json({ ok: true, row: rows?.[0] || null });
+    }
+    catch (err) {
+        console.error('save lead failed', err);
+        return res.status(500).json({ ok: false, error: 'failed to save lead' });
+    }
+    finally {
+        await conn.end();
+    }
 });
 app.post('/api/bulk', async (req, res) => {
     const ids = (String(req.body.ids || '')).split(',').map(x => Number(x.trim())).filter(n => Number.isFinite(n) && n > 0);

@@ -41,6 +41,11 @@
   40% { opacity: 1; transform: scale(1); }
 }
 
+@keyframes pcToastDrop {
+  from { opacity: 0; transform: translate3d(0, -18px, 0) scale(0.96); }
+  to { opacity: 1; transform: translate3d(0, 0, 0) scale(1); }
+}
+
 .pc-smooth, .pc-smooth * {
   transition: background-color 180ms ease, color 180ms ease, border-color 180ms ease, box-shadow 180ms ease;
 }
@@ -51,6 +56,21 @@
 
 .pc-fade-in {
   animation: pcFadeIn 150ms ease-out;
+}
+
+.pc-toast-stack {
+  position: fixed;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(540px, calc(100vw - 24px));
+  z-index: 420;
+  pointer-events: none;
+}
+
+.pc-toast {
+  animation: pcToastDrop 220ms cubic-bezier(0.16, 1, 0.3, 1);
+  pointer-events: auto;
 }
 
 /* KPI card hover lift */

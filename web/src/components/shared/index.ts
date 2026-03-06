@@ -6,3 +6,4 @@ export { ConfirmModal } from './ConfirmModal';
 export { EmptyState } from './EmptyState';
 export { PagePagination } from './PagePagination';
 export { AnimatedNumber } from './AnimatedNumber';
+export { ToastProvider, useToast } from './ToastProvider';

@@ -1,7 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Lead, SavedView, SortKey, Interview } from '../types';
+import { useToast } from '../components/shared';
+
+type LeadMessages = {
+  nameVerticalRequired: string;
+  createLeadFailed: string;
+  saveLeadFailed: string;
+  networkError: string;
+};
 
 export function useLeads(tab: string | null, meEmail?: string) {
+  const { showToast } = useToast();
   const [rows, setRows] = useState<Lead[]>([]);
   const [q, setQ] = useState('');
   const [minScore, setMinScore] = useState<number>(0);
@@ -130,28 +139,74 @@ export function useLeads(tab: string | null, meEmail?: string) {
     else { setSortKey(k); setSortDir('desc'); }
   };
 
-  async function saveLead() {
+  async function readResponseBody(response: Response, fallback: string) {
+    const contentType = String(response.headers.get('content-type') || '');
+
+    if (contentType.includes('application/json')) {
+      const body = await response.json().catch(() => null);
+      const message = String(body?.error || body?.message || fallback).trim() || fallback;
+      return { body, message };
+    }
+
+    const text = (await response.text().catch(() => '')).trim();
+    return { body: null, message: text || fallback };
+  }
+
+  function toClientMessage(error: unknown, networkError: string) {
+    const message = String(error instanceof Error ? error.message : error || '').trim();
+    if (!message) return networkError;
+    if (message === 'Failed to fetch' || message.includes('Load failed')) return networkError;
+    return message;
+  }
+
+  async function saveLead(t?: Pick<LeadMessages, 'saveLeadFailed' | 'networkError'>) {
     if (!selected) return;
     const emailParts = String((selected as any).emails || '')
       .split(/[,\n]+/g)
       .map(s => s.trim())
       .filter(Boolean);
-    await fetch(`/api/leads/${selected.id}/emails`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ emails: emailParts }),
-    });
-    await fetch(`/api/leads/${selected.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(selected) });
-    setSelected(null);
-    markRecentEdited([selected.id]);
-    await loadLeads();
+
+    const fallback = t?.saveLeadFailed || 'Failed to save lead';
+    const networkError = t?.networkError || 'Network error. Please try again.';
+
+    try {
+      const saveResponse = await fetch(`/api/leads/${selected.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(selected),
+      });
+      const saveResult = await readResponseBody(saveResponse, fallback);
+      if (!saveResponse.ok || !saveResult.body?.ok) throw new Error(saveResult.message);
+
+      const emailResponse = await fetch(`/api/leads/${selected.id}/emails`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ emails: emailParts }),
+      });
+      const emailResult = await readResponseBody(emailResponse, fallback);
+      if (!emailResponse.ok || !emailResult.body?.ok) throw new Error(emailResult.message);
+
+      setSelected(null);
+      markRecentEdited([selected.id]);
+      await loadLeads();
+    } catch (error) {
+      showToast({
+        tone: 'error',
+        title: fallback,
+        message: toClientMessage(error, networkError),
+      });
+    }
   }
 
-  async function createLead(t: { nameVerticalRequired: string; createLeadFailed: string }) {
+  async function createLead(t: Pick<LeadMessages, 'nameVerticalRequired' | 'createLeadFailed' | 'networkError'>) {
     const name = String(createLeadDraft.name || '').trim();
     const vertical = String(createLeadDraft.vertical || '').trim();
     if (!name || !vertical) {
-      window.alert(t.nameVerticalRequired);
+      showToast({
+        tone: 'error',
+        title: t.createLeadFailed,
+        message: t.nameVerticalRequired,
+      });
       return;
     }
     setCreateLeadSubmitting(true);
@@ -170,14 +225,18 @@ export function useLeads(tab: string | null, meEmail?: string) {
         tidb_potential_reason: String(createLeadDraft.tidb_potential_reason || ''),
       };
       const r = await fetch('/api/leads', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-      const j = await r.json();
-      if (!r.ok || !j?.ok) throw new Error(j?.error || 'create failed');
+      const { body, message } = await readResponseBody(r, t.createLeadFailed);
+      if (!r.ok || !body?.ok) throw new Error(message);
       setCreateLeadOpen(false);
       setCreateLeadDraft({ name: '', vertical: '', region: '', city: '', source: 'manual', lead_status: 'new', owner: '', creator: meEmail || '', emails: '', tidb_potential_score: 0, tidb_potential_reason: '' });
-      markRecentEdited([Number(j.id)]);
+      markRecentEdited([Number(body.id)]);
       await loadLeads();
-    } catch (e: any) {
-      window.alert(`${t.createLeadFailed}: ${e?.message || e}`);
+    } catch (error) {
+      showToast({
+        tone: 'error',
+        title: t.createLeadFailed,
+        message: toClientMessage(error, t.networkError),
+      });
     } finally {
       setCreateLeadSubmitting(false);
     }

@@ -47,7 +47,7 @@ export function App() {
 
   // Dashboard needs refreshing after lead mutations
   const originalSaveLead = leads.saveLead;
-  const saveLead = async () => { await originalSaveLead(); await loadDashboard(); };
+  const saveLead = async () => { await originalSaveLead(t); await loadDashboard(); };
   const originalCreateLead = leads.createLead;
   const createLead = async () => { await originalCreateLead(t); await loadDashboard(); };
   const originalConfirmDelete = leads.confirmDelete;
