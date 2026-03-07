@@ -1,6 +1,7 @@
 import { Badge, Box, Button, Center, Divider, Group, Loader, Modal, Paper, SimpleGrid, Stack, Text } from '@mantine/core';
 import { IconChevronLeft, IconChevronRight, IconDownload } from '@tabler/icons-react';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import DOMPurify from 'dompurify';
 
 import type { Interview } from '../../types';
 
@@ -106,9 +107,17 @@ export function InterviewDetailModal({
     ['Requirements', detail.requirements],
     ['Objections / Risks', detail.objections_risks],
     ['Next Steps', detail.next_steps],
-    ['Transcript Plain', detail.transcript_plain],
-    ['Transcript HTML', detail.transcript_html],
   ].filter(([, value]) => isPresent(value)) : [];
+
+  const safeTranscriptHtml = useMemo(() => {
+    if (!isPresent(detail?.transcript_html)) return '';
+    return DOMPurify.sanitize(String(detail?.transcript_html || ''), {
+      USE_PROFILES: { html: true },
+      FORBID_TAGS: ['script', 'style', 'iframe', 'object', 'embed', 'form', 'input', 'button'],
+      FORBID_ATTR: ['onerror', 'onload', 'onclick', 'onmouseover', 'style'],
+      ALLOW_DATA_ATTR: false,
+    });
+  }, [detail?.transcript_html]);
 
   return (
     <Modal
@@ -183,11 +192,16 @@ export function InterviewDetailModal({
             {isPresent(detail.transcript_html) ? (
               <Paper withBorder radius="md" p="sm">
                 <Text size="xs" c="dimmed" tt="uppercase" fw={700} mb={6}>
-                  Transcript HTML Preview
+                  Transcript
                 </Text>
                 <Box
-                  style={{ whiteSpace: 'normal', wordBreak: 'break-word' }}
-                  dangerouslySetInnerHTML={{ __html: String(detail.transcript_html) }}
+                  style={{
+                    whiteSpace: 'normal',
+                    wordBreak: 'break-word',
+                    lineHeight: 1.7,
+                    fontSize: 14,
+                  }}
+                  dangerouslySetInnerHTML={{ __html: safeTranscriptHtml }}
                 />
               </Paper>
             ) : null}
