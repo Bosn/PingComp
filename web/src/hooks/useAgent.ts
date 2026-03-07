@@ -50,8 +50,22 @@ export function useAgent() {
       const r = await fetch('/api/agent/chat', {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message: q })
       });
-      const j = await r.json();
-      setAgentSessions(prev => prev.map(ss => ss.id === currentSession?.id ? { ...ss, updatedAt: Date.now(), turns: [...ss.turns, { role: 'assistant', text: j.reply || 'Done', rows: j.rows || [], chart: j.chart || undefined }] } : ss));
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok || j?.ok === false) {
+        const errMsg = String(j?.error || j?.message || `HTTP ${r.status}`);
+        throw new Error(errMsg);
+      }
+      const replyText = String(j?.reply || '').trim();
+      setAgentSessions(prev => prev.map(ss => ss.id === currentSession?.id ? {
+        ...ss,
+        updatedAt: Date.now(),
+        turns: [...ss.turns, {
+          role: 'assistant',
+          text: replyText || '（空回复）',
+          rows: Array.isArray(j?.rows) ? j.rows : [],
+          chart: j?.chart || undefined
+        }]
+      } : ss));
     } catch (e: any) {
       setAgentSessions(prev => prev.map(ss => ss.id === currentSession?.id ? { ...ss, updatedAt: Date.now(), turns: [...ss.turns, { role: 'assistant', text: `请求失败：${e?.message || e}` }] } : ss));
     } finally {
