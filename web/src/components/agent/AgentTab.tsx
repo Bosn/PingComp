@@ -1,7 +1,7 @@
 import { Tabs, Box, Paper, Stack, Group, Text, Badge, Button, TextInput, ScrollArea, Table } from '@mantine/core';
 import { IconSend, IconRobot } from '@tabler/icons-react';
 import { useComputedColorScheme } from '@mantine/core';
-import { useEffect, useRef } from 'react';
+import { Fragment, useEffect, useRef } from 'react';
 import { GlassCard } from '../shared';
 import { PieMini, LineMini, BarMini } from '../charts';
 import { useThemeStyles } from '../../hooks/useThemeStyles';
@@ -24,6 +24,35 @@ type Props = {
   deleteCurrentSession: () => void;
   t: I18NStrings;
 };
+
+function renderTextWithLinks(text: string) {
+  const urlSplitRe = /(https?:\/\/[^\s<>{}"'`]+)/g;
+  const lines = text.split('\n');
+  return lines.map((line, lineIdx) => {
+    const parts = line.split(urlSplitRe);
+    return (
+      <Fragment key={`line-${lineIdx}`}>
+        {parts.map((part, i) => {
+          if (/^https?:\/\//.test(part)) {
+            return (
+              <a
+                key={`u-${lineIdx}-${i}`}
+                href={part}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{ color: '#2563eb', textDecoration: 'underline', wordBreak: 'break-all' }}
+              >
+                {part}
+              </a>
+            );
+          }
+          return <Fragment key={`t-${lineIdx}-${i}`}>{part}</Fragment>;
+        })}
+        {lineIdx < lines.length - 1 ? <br /> : null}
+      </Fragment>
+    );
+  });
+}
 
 export function AgentTab({
   agentInput, setAgentInput,
@@ -140,7 +169,9 @@ export function AgentTab({
                           : undefined,
                       }}
                     >
-                      <Text size="sm" style={{ lineHeight: 1.6 }}>{t0.text}</Text>
+                      <Text size="sm" style={{ lineHeight: 1.6, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                        {renderTextWithLinks(t0.text)}
+                      </Text>
                       {t0.chart ? (
                         <GlassCard mt="xs" p="sm">
                           <Text size="xs" fw={700} mb={6}>{t0.chart.title || 'Chart'}</Text>
