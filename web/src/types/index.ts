@@ -37,7 +37,11 @@ export type Interview = {
   tags?: string | null;
   transcript_html?: string | null;
   transcript_plain?: string | null;
+  created_at?: string;
+  created_by?: string | null;
   updated_at?: string;
+  updated_by?: string | null;
+  deleted_at?: string | null;
 };
 
 export type OutreachEmailSend = {

@@ -2,13 +2,12 @@ import { useEffect, useState } from 'react';
 import {
   Anchor, AppShell, Autocomplete, Button, Group, Modal, NumberInput, Select,
   SimpleGrid, Stack, Text, TextInput, Textarea, Tooltip, ActionIcon, ScrollArea,
-  Table, Paper,
+  Table,
 } from '@mantine/core';
-import { IconNotes, IconDownload, IconEdit, IconTrash } from '@tabler/icons-react';
+import { IconNotes, IconDownload, IconEdit, IconTrash, IconEye } from '@tabler/icons-react';
 
 import type { Interview } from './types';
 import { useLocalLang } from './i18n';
-import { useThemeStyles } from './hooks/useThemeStyles';
 import { useAuth } from './hooks/useAuth';
 import { useLeads } from './hooks/useLeads';
 import { useDashboard } from './hooks/useDashboard';
@@ -22,6 +21,7 @@ import { AgentTab } from './components/agent/AgentTab';
 import { LeadsTab } from './components/leads/LeadsTab';
 import { OutreachTab } from './components/outreach/OutreachTab';
 import { InterviewsTab } from './components/interviews/InterviewsTab';
+import { InterviewDetailModal } from './components/interviews/InterviewDetailModal';
 import { EnrichTab } from './components/enrich/EnrichTab';
 import { DashboardTab } from './components/dashboard/DashboardTab';
 import { ConfirmModal } from './components/shared';
@@ -44,6 +44,20 @@ export function App() {
   const interviews = useInterviews(tab);
   const outreach = useOutreach(tab);
   const agent = useAgent();
+  const [interviewDetailCtx, setInterviewDetailCtx] = useState<{ ids: number[]; index: number } | null>(null);
+
+  function openInterviewDetail(ids: number[], index: number) {
+    if (!ids.length || index < 0 || index >= ids.length) return;
+    setInterviewDetailCtx({ ids, index });
+  }
+
+  function closeInterviewDetail() {
+    setInterviewDetailCtx(null);
+  }
+
+  function showInterviewDetailFromRows(rows: Interview[], index: number) {
+    openInterviewDetail(rows.map((row) => row.id), index);
+  }
 
   // Dashboard needs refreshing after lead mutations
   const originalSaveLead = leads.saveLead;
@@ -191,6 +205,7 @@ export function App() {
             loadInterviews={interviews.loadInterviews}
             getExportParams={interviews.getExportParams}
             openInterviewEditor={leads.openInterviewEditor}
+            openInterviewDetail={(index) => showInterviewDetailFromRows(interviews.interviewsRows, index)}
             t={t}
           />
 
@@ -351,25 +366,56 @@ export function App() {
                 <Table.Tbody>
                   {leads.leadInterviewsRows.length === 0 ? (
                     <Table.Tr><Table.Td colSpan={7}><Text c="dimmed" ta="center" py="md">{leads.leadInterviewsLoading ? 'loading...' : t.noData}</Text></Table.Td></Table.Tr>
-                  ) : leads.leadInterviewsRows.map((it) => (
+                  ) : leads.leadInterviewsRows.map((it, index) => (
                     <Table.Tr key={it.id}>
                       <Table.Td>{it.id}</Table.Td>
-                      <Table.Td style={{ maxWidth: 420 }}><Tooltip withArrow label={it.title}><Text fw={600} lineClamp={1}>{it.title}</Text></Tooltip></Table.Td>
+                      <Table.Td style={{ maxWidth: 420 }}>
+                        <Tooltip withArrow label={it.title}>
+                          <Text
+                            fw={600}
+                            lineClamp={1}
+                            component="button"
+                            type="button"
+                            onClick={() => showInterviewDetailFromRows(leads.leadInterviewsRows, index)}
+                            style={{
+                              display: 'block',
+                              width: '100%',
+                              textAlign: 'left',
+                              background: 'transparent',
+                              border: 0,
+                              padding: 0,
+                              cursor: 'pointer',
+                              color: 'var(--mantine-color-blue-6)',
+                            }}
+                          >
+                            {it.title}
+                          </Text>
+                        </Tooltip>
+                      </Table.Td>
                       <Table.Td>{(it.interview_date || '').slice(0, 10)}</Table.Td>
                       <Table.Td>{it.channel}</Table.Td>
                       <Table.Td>{it.interviewer || '-'}</Table.Td>
                       <Table.Td><Text size="xs" c="dimmed" lineClamp={1}>{it.tags || '-'}</Text></Table.Td>
                       <Table.Td>
                         <Group gap={6}>
-                          <ActionIcon variant="light" color="blue" onClick={() => leads.openInterviewEditor(it)}><IconEdit size={14} /></ActionIcon>
-                          <ActionIcon variant="light" onClick={() => window.open(`/interviews/${it.id}/export.md`, '_blank')}><IconDownload size={14} /></ActionIcon>
-                          <ActionIcon variant="light" color="red" onClick={async () => {
-                            const ok = window.confirm('Soft delete this interview?');
-                            if (!ok) return;
-                            await fetch(`/api/interviews/${it.id}`, { method: 'DELETE' });
-                            leads.setLeadInterviewsRows([]); leads.setLeadInterviewsCursor(null);
-                            await leads.loadLeadInterviews({ reset: true });
-                          }}><IconTrash size={14} /></ActionIcon>
+                          <Tooltip withArrow label="Edit">
+                            <ActionIcon variant="light" color="blue" onClick={() => leads.openInterviewEditor(it)}><IconEdit size={14} /></ActionIcon>
+                          </Tooltip>
+                          <Tooltip withArrow label="View detail">
+                            <ActionIcon variant="light" color="grape" onClick={() => showInterviewDetailFromRows(leads.leadInterviewsRows, index)}><IconEye size={14} /></ActionIcon>
+                          </Tooltip>
+                          <Tooltip withArrow label="Export">
+                            <ActionIcon variant="light" onClick={() => window.open(`/interviews/${it.id}/export.md`, '_blank')}><IconDownload size={14} /></ActionIcon>
+                          </Tooltip>
+                          <Tooltip withArrow label="Delete">
+                            <ActionIcon variant="light" color="red" onClick={async () => {
+                              const ok = window.confirm('Soft delete this interview?');
+                              if (!ok) return;
+                              await fetch(`/api/interviews/${it.id}`, { method: 'DELETE' });
+                              leads.setLeadInterviewsRows([]); leads.setLeadInterviewsCursor(null);
+                              await leads.loadLeadInterviews({ reset: true });
+                            }}><IconTrash size={14} /></ActionIcon>
+                          </Tooltip>
                         </Group>
                       </Table.Td>
                     </Table.Tr>
@@ -429,6 +475,16 @@ export function App() {
           </Stack>
         ) : null}
       </Modal>
+
+      <InterviewDetailModal
+        opened={!!interviewDetailCtx}
+        interviewId={interviewDetailCtx ? interviewDetailCtx.ids[interviewDetailCtx.index] : null}
+        currentIndex={interviewDetailCtx?.index || 0}
+        total={interviewDetailCtx?.ids.length || 0}
+        onClose={closeInterviewDetail}
+        onPrev={() => setInterviewDetailCtx((current) => current && current.index > 0 ? { ...current, index: current.index - 1 } : current)}
+        onNext={() => setInterviewDetailCtx((current) => current && current.index < current.ids.length - 1 ? { ...current, index: current.index + 1 } : current)}
+      />
     </AppShell>
   );
 }

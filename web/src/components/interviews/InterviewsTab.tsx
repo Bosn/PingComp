@@ -1,5 +1,5 @@
 import { Tabs, Box, Group, TextInput, Button, Select, Divider, ScrollArea, Table, Text, Tooltip, ActionIcon, ThemeIcon, Badge } from '@mantine/core';
-import { IconFilter, IconDownload, IconEdit, IconNotes, IconCalendar } from '@tabler/icons-react';
+import { IconFilter, IconDownload, IconEdit, IconNotes, IconCalendar, IconEye } from '@tabler/icons-react';
 import { GlassCard } from '../shared';
 import { useThemeStyles } from '../../hooks/useThemeStyles';
 import type { Interview } from '../../types';
@@ -39,6 +39,7 @@ type Props = {
   loadInterviews: (opts?: { reset?: boolean }) => void;
   getExportParams: () => URLSearchParams;
   openInterviewEditor: (it: Interview) => void;
+  openInterviewDetail: (index: number) => void;
   t: I18NStrings;
 };
 
@@ -54,7 +55,7 @@ export function InterviewsTab({
   interviewsRows, setInterviewsRows,
   interviewsCursor, setInterviewsCursor,
   interviewsLoading, loadInterviews, getExportParams,
-  openInterviewEditor, t,
+  openInterviewEditor, openInterviewDetail, t,
 }: Props) {
   const { isDark } = useThemeStyles();
 
@@ -113,7 +114,7 @@ export function InterviewsTab({
               <Table.Tbody>
                 {interviewsRows.length === 0 ? (
                   <Table.Tr><Table.Td colSpan={8}><Text c="dimmed" ta="center" py="xl">{interviewsLoading ? 'loading...' : t.noData}</Text></Table.Td></Table.Tr>
-                ) : interviewsRows.map((it) => {
+                ) : interviewsRows.map((it, index) => {
                   const channelColor = CHANNEL_COLORS[it.channel?.toLowerCase() || ''] || 'gray';
                   return (
                     <Table.Tr
@@ -131,7 +132,25 @@ export function InterviewsTab({
                       </Table.Td>
                       <Table.Td style={{ maxWidth: 360 }}>
                         <Tooltip withArrow label={it.title}>
-                          <Text fw={600} lineClamp={1}>{it.title}</Text>
+                          <Text
+                            fw={600}
+                            lineClamp={1}
+                            component="button"
+                            type="button"
+                            onClick={() => openInterviewDetail(index)}
+                            style={{
+                              display: 'block',
+                              width: '100%',
+                              textAlign: 'left',
+                              background: 'transparent',
+                              border: 0,
+                              padding: 0,
+                              cursor: 'pointer',
+                              color: 'var(--mantine-color-blue-6)',
+                            }}
+                          >
+                            {it.title}
+                          </Text>
                         </Tooltip>
                       </Table.Td>
                       <Table.Td>
@@ -156,6 +175,9 @@ export function InterviewsTab({
                         <Group gap={6}>
                           <Tooltip label="Edit" withArrow>
                             <ActionIcon variant="light" color="blue" radius="md" onClick={() => openInterviewEditor(it)}><IconEdit size={14} /></ActionIcon>
+                          </Tooltip>
+                          <Tooltip label="View detail" withArrow>
+                            <ActionIcon variant="light" color="grape" radius="md" onClick={() => openInterviewDetail(index)}><IconEye size={14} /></ActionIcon>
                           </Tooltip>
                           <Tooltip label="Export" withArrow>
                             <ActionIcon variant="light" radius="md" onClick={() => window.open(`/interviews/${it.id}/export.md`, '_blank')}><IconDownload size={14} /></ActionIcon>
