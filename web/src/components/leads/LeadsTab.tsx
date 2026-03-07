@@ -303,7 +303,7 @@ export function LeadsTab(props: Props) {
             totalPages={totalPages}
             pageSize={pageSize}
             onPageChange={setPage}
-            onPageSizeChange={(v) => { setPageSize(v); setPage(1); }}
+            onPageSizeChange={setPageSize}
             pageSizeLabel={t.pageSize}
             prevLabel={t.prev}
             nextLabel={t.next}

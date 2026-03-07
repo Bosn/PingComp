@@ -1,5 +1,5 @@
-import { Tabs, Box, SimpleGrid, Card, Group, Text, ThemeIcon, Paper, TextInput, Button, ScrollArea, Table } from '@mantine/core';
-import { IconClock, IconActivity, IconCheck, IconX } from '@tabler/icons-react';
+import { Tabs, Box, SimpleGrid, Card, Group, Text, ThemeIcon, TextInput, Button, ScrollArea, Table, Alert } from '@mantine/core';
+import { IconClock, IconActivity, IconCheck, IconX, IconInfoCircle } from '@tabler/icons-react';
 import { EnrichStatusBadge, AnimatedNumber, GlassCard } from '../shared';
 import { useThemeStyles } from '../../hooks/useThemeStyles';
 import type { EnrichPayload } from '../../types';
@@ -35,6 +35,10 @@ export function EnrichTab({ enrich, enqueueIds, setEnqueueIds, enqueue, runEnric
   return (
     <Tabs.Panel value="enrich" pt="md">
       <Box px="md" className="pc-slide-up">
+        <Alert mb="md" radius="lg" variant="light" color="blue" icon={<IconInfoCircle size={16} />}>
+          {t.enrichConceptAlert}
+        </Alert>
+
         <SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }} spacing="md">
           {stats.map(s => (
             <Card

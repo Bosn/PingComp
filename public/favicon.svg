@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" fill="none">
+  <defs>
+    <linearGradient id="pingcomp-favicon-gradient" x1="18" y1="12" x2="46" y2="52" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#60A5FA"/>
+      <stop offset="1" stop-color="#2563EB"/>
+    </linearGradient>
+  </defs>
+  <path
+    d="M22 12V52M22 12H35C42.1797 12 48 17.8203 48 25C48 32.1797 42.1797 38 35 38H22"
+    stroke="url(#pingcomp-favicon-gradient)"
+    stroke-width="8"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+</svg>

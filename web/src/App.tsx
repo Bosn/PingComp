@@ -181,6 +181,9 @@ export function App() {
             outreachEmail={outreach.outreachEmail} setOutreachEmail={outreach.setOutreachEmail}
             outreachFrom={outreach.outreachFrom} setOutreachFrom={outreach.setOutreachFrom}
             outreachTo={outreach.outreachTo} setOutreachTo={outreach.setOutreachTo}
+            outreachPage={outreach.outreachPage} setOutreachPage={outreach.setOutreachPage}
+            outreachPageSize={outreach.outreachPageSize} setOutreachPageSize={outreach.setOutreachPageSize}
+            outreachTotalPages={outreach.outreachTotalPages} outreachTotalRows={outreach.outreachTotalRows}
             outreachRows={outreach.outreachRows}
             outreachLoading={outreach.outreachLoading}
             outreachExpanded={outreach.outreachExpanded} setOutreachExpanded={outreach.setOutreachExpanded}

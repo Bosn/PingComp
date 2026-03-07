@@ -1028,7 +1028,8 @@ app.get('/api/outreach/email-sends', async (req, res) => {
     const email = String(req.query.email || '').trim().toLowerCase();
     const from = String(req.query.from || '').trim();
     const to = String(req.query.to || '').trim();
-    const limit = Math.min(500, Math.max(1, Number(req.query.limit || 200)));
+    const page = Math.max(1, Number(req.query.page || 1) || 1);
+    const pageSize = Math.min(100, Math.max(10, Number(req.query.pageSize || req.query.limit || 15) || 15));
     let where = ' WHERE 1=1';
     const args = [];
     if (leadId != null) {
@@ -1057,7 +1058,12 @@ app.get('/api/outreach/email-sends', async (req, res) => {
     }
     const conn = await getConn();
     try {
-        const [rows] = await conn.query(`SELECT * FROM outreach_email_sends ${where} ORDER BY sent_at DESC, id DESC LIMIT ?`, [...args, limit]);
+        const [countRows] = await conn.query(`SELECT COUNT(*) c FROM outreach_email_sends ${where}`, args);
+        const total = Number(countRows?.[0]?.c || 0);
+        const totalPages = Math.max(1, Math.ceil(total / pageSize));
+        const safePage = Math.min(page, totalPages);
+        const offset = (safePage - 1) * pageSize;
+        const [rows] = await conn.query(`SELECT * FROM outreach_email_sends ${where} ORDER BY sent_at DESC, id DESC LIMIT ? OFFSET ?`, [...args, pageSize, offset]);
         const list = Array.isArray(rows) ? rows : [];
         const grouped = new Map();
         for (const r of list) {
@@ -1091,7 +1097,7 @@ app.get('/api/outreach/email-sends', async (req, res) => {
                 batch_recipient_count: recipients.length,
             };
         });
-        return res.json({ ok: true, rows: enhanced });
+        return res.json({ ok: true, rows: enhanced, total, page: safePage, totalPages, pageSize });
     }
     finally {
         await conn.end();

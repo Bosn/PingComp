@@ -1,6 +1,6 @@
 import { Tabs, Box, Group, TextInput, Button, Divider, ScrollArea, Table, Text, Tooltip, ActionIcon, ThemeIcon, Badge } from '@mantine/core';
 import { IconFilter, IconArrowUp, IconArrowDown, IconMail, IconSend } from '@tabler/icons-react';
-import { GlassCard } from '../shared';
+import { GlassCard, PagePagination } from '../shared';
 import { useThemeStyles } from '../../hooks/useThemeStyles';
 import type { OutreachEmailSend } from '../../types';
 import type { I18NStrings } from '../../i18n';
@@ -14,11 +14,17 @@ type Props = {
   setOutreachFrom: (v: string) => void;
   outreachTo: string;
   setOutreachTo: (v: string) => void;
+  outreachPage: number;
+  setOutreachPage: (v: number) => void;
+  outreachPageSize: string;
+  setOutreachPageSize: (v: string) => void;
+  outreachTotalPages: number;
+  outreachTotalRows: number;
   outreachRows: OutreachEmailSend[];
   outreachLoading: boolean;
   outreachExpanded: Set<number>;
   setOutreachExpanded: (v: Set<number>) => void;
-  loadOutreachSends: () => void;
+  loadOutreachSends: (pageOverride?: number) => void;
   t: I18NStrings;
 };
 
@@ -27,6 +33,9 @@ export function OutreachTab({
   outreachEmail, setOutreachEmail,
   outreachFrom, setOutreachFrom,
   outreachTo, setOutreachTo,
+  outreachPage, setOutreachPage,
+  outreachPageSize, setOutreachPageSize,
+  outreachTotalPages, outreachTotalRows,
   outreachRows, outreachLoading,
   outreachExpanded, setOutreachExpanded,
   loadOutreachSends, t,
@@ -42,7 +51,7 @@ export function OutreachTab({
               <IconMail size={14} />
             </ThemeIcon>
             <Text fw={700} size="md">Outreach Sends</Text>
-            <Badge size="sm" variant="light" color="blue">{outreachRows.length}</Badge>
+            <Badge size="sm" variant="light" color="blue">{outreachTotalRows}</Badge>
           </Group>
 
           <Group wrap="wrap" align="end" style={{
@@ -55,8 +64,12 @@ export function OutreachTab({
             <TextInput w={260} label={t.email} placeholder="(optional)" value={outreachEmail} onChange={(e) => setOutreachEmail(e.currentTarget.value)} />
             <TextInput w={140} label={t.from} placeholder="YYYY-MM-DD" value={outreachFrom} onChange={(e) => setOutreachFrom(e.currentTarget.value)} />
             <TextInput w={140} label={t.to} placeholder="YYYY-MM-DD" value={outreachTo} onChange={(e) => setOutreachTo(e.currentTarget.value)} />
-            <Button variant="gradient" gradient={{ from: 'blue', to: 'violet', deg: 135 }} leftSection={<IconFilter size={14} />} loading={outreachLoading} onClick={() => { setOutreachExpanded(new Set()); loadOutreachSends(); }}>{t.apply}</Button>
-            <Button variant="subtle" onClick={() => { setOutreachLeadId(''); setOutreachEmail(''); setOutreachFrom(''); setOutreachTo(''); setOutreachExpanded(new Set()); setTimeout(() => loadOutreachSends(), 0); }}>{t.reset}</Button>
+            <Button variant="gradient" gradient={{ from: 'blue', to: 'violet', deg: 135 }} leftSection={<IconFilter size={14} />} loading={outreachLoading} onClick={() => { setOutreachExpanded(new Set()); loadOutreachSends(1); }}>{t.apply}</Button>
+            <Button variant="subtle" onClick={() => { setOutreachLeadId(''); setOutreachEmail(''); setOutreachFrom(''); setOutreachTo(''); setOutreachExpanded(new Set()); loadOutreachSends(1); }}>{t.reset}</Button>
+          </Group>
+
+          <Group mt="md" justify="space-between" wrap="wrap">
+            <Text size="sm" c="dimmed">{t.total}: {outreachTotalRows} · {t.page}: {outreachPage}/{outreachTotalPages}{outreachLoading ? ` · ${t.loading}` : ''}</Text>
           </Group>
 
           <Divider my="md" style={{ borderColor: isDark ? 'rgba(120,140,180,0.15)' : 'rgba(148,163,184,0.12)' }} />
@@ -129,6 +142,17 @@ export function OutreachTab({
               </Table.Tbody>
             </Table>
           </ScrollArea>
+
+          <PagePagination
+            page={outreachPage}
+            totalPages={outreachTotalPages}
+            pageSize={outreachPageSize}
+            onPageChange={setOutreachPage}
+            onPageSizeChange={setOutreachPageSize}
+            pageSizeLabel={t.pageSize}
+            prevLabel={t.prev}
+            nextLabel={t.next}
+          />
         </GlassCard>
       </Box>
     </Tabs.Panel>
