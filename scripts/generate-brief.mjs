@@ -104,18 +104,18 @@ async function fetchData() {
 
 async function summarizeWithAgent(payload) {
   const msg = [
-    '你是 PingComp Brief 生成器。请基于给定 JSON 生成简报。',
-    '输出必须是 Markdown。',
-    '结构要求：',
-    '1) ## 本次变化概览',
-    '2) ## 新增 Leads（重点 5 条）',
-    '3) ## 新增 Interview（重点 5 条）',
-    '4) ## 最近修改 Leads（重点 5 条）',
-    '5) ## 建议动作（最多 8 条）',
-    '6) ## 风险与异常',
-    '要求：用中文；尽量简洁；若无明显风险可写“暂无明显风险”。',
+    'You are the PingComp Brief generator. Create a concise brief from the provided JSON.',
+    'Output must be Markdown in English.',
+    'Required structure:',
+    '1) ## Change Overview',
+    '2) ## New Leads (Top 5)',
+    '3) ## New Interviews (Top 5)',
+    '4) ## Recently Updated Leads (Top 5)',
+    '5) ## Recommended Actions (up to 8)',
+    '6) ## Risks & Anomalies',
+    'Requirements: English only, concise, and actionable. If no obvious risk, write "No obvious risk detected."',
     '',
-    '输入 JSON：',
+    'Input JSON:',
     JSON.stringify(payload),
   ].join('\n');
 
