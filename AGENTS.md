@@ -19,6 +19,18 @@ This repository is used by the `pingcomp-sandbox` OpenClaw agent for PingComp's 
   - This includes SQL `UPDATE/DELETE`, record edits, bulk changes, or destructive scripts.
 - When a request could modify data, first return a short execution plan and ask for confirmation.
 
+### Database connection method (PingComp)
+
+- Database credentials are in this repository `.env` file (`DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`).
+- Default "leads" table in PingComp means: `ai_customers`.
+- Preferred query method is Node + mysql2 from repo root, loading `.env` via dotenv.
+
+Example read-only query pattern:
+
+```bash
+node -e "require('dotenv').config(); const mysql=require('mysql2/promise'); (async()=>{const c=await mysql.createConnection({host:process.env.DB_HOST,port:Number(process.env.DB_PORT||4000),user:process.env.DB_USER,password:process.env.DB_PASSWORD,database:process.env.DB_NAME,ssl:{rejectUnauthorized:true}}); const [rows]=await c.query('SELECT id,name,tidb_potential_score,lead_status,owner FROM ai_customers ORDER BY IFNULL(tidb_potential_score,0) DESC LIMIT 20'); console.log(JSON.stringify(rows)); await c.end();})().catch(e=>{console.error(e.message); process.exit(1);});"
+```
+
 ### Response style for Ask Agent
 
 - Prioritize direct, useful answers for sales/ops workflows.

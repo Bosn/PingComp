@@ -48,7 +48,7 @@ export function useAgent() {
     setAgentLoading(true);
     try {
       const r = await fetch('/api/agent/chat', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message: q })
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message: q, sessionId: sid })
       });
       const j = await r.json().catch(() => ({}));
       if (!r.ok || j?.ok === false) {

@@ -21,6 +21,28 @@ function extractJsonObject(raw: string): any | null {
   try { return JSON.parse(m[0]); } catch { return null; }
 }
 
+function extractJsonValue(raw: string): any | null {
+  const t = String(raw || '').trim();
+  if (!t) return null;
+  try { return JSON.parse(t); } catch {}
+
+  const fenced = t.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  if (fenced?.[1]) {
+    const inner = fenced[1].trim();
+    try { return JSON.parse(inner); } catch {}
+  }
+
+  const arrMatch = t.match(/\[[\s\S]*\]$/);
+  if (arrMatch?.[0]) {
+    try { return JSON.parse(arrMatch[0]); } catch {}
+  }
+  const objMatch = t.match(/\{[\s\S]*\}$/);
+  if (objMatch?.[0]) {
+    try { return JSON.parse(objMatch[0]); } catch {}
+  }
+  return null;
+}
+
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 app.use(express.static('public'));
@@ -1165,6 +1187,8 @@ app.get('/api/outreach/email-sends', async (req: Request, res: Response) => {
 
 app.post('/api/agent/chat', async (req: Request, res: Response) => {
   const message = String(req.body?.message || '').trim();
+  const sessionIdRaw = String(req.body?.sessionId || '').trim();
+  const sessionId = sessionIdRaw.replace(/[^a-zA-Z0-9._:-]/g, '').slice(0, 120);
   if (!message) return res.status(400).json({ ok: false, error: 'empty message' });
 
   const qwenKey = String(process.env.QWEN_API_KEY || '').trim();
@@ -1231,14 +1255,19 @@ app.post('/api/agent/chat', async (req: Request, res: Response) => {
     const strict = strictEnv === 'true' || strictEnv === '1' || strictEnv === 'yes';
 
     try {
-      const { stdout } = await execFileAsync('openclaw', [
+      const agentArgs = [
         '--no-color',
         'agent',
         '--agent', openclawAgentId,
         '--message', message,
         '--json',
         '--timeout', String(Number.isFinite(openclawTimeout) ? openclawTimeout : 120),
-      ], { maxBuffer: 4 * 1024 * 1024 });
+      ];
+      if (sessionId) {
+        agentArgs.push('--session-id', `pingcomp:${sessionId}`);
+      }
+
+      const { stdout } = await execFileAsync('openclaw', agentArgs, { maxBuffer: 4 * 1024 * 1024 });
 
       const parsed = extractJsonObject(stdout || '');
       const payloads = parsed?.result?.payloads;
@@ -1247,8 +1276,34 @@ app.post('/api/agent/chat', async (req: Request, res: Response) => {
         : String(parsed?.reply || parsed?.result?.reply || '').trim();
 
       if (!reply) throw new Error('openclaw_empty_reply');
+
+      let rows: any[] = [];
+      let chart: any = null;
+      let finalReply = reply;
+      const decoded = extractJsonValue(reply);
+      if (Array.isArray(decoded)) {
+        rows = decoded;
+        finalReply = `已查询到 ${rows.length} 条记录。`;
+      } else if (decoded && typeof decoded === 'object') {
+        if (Array.isArray((decoded as any).rows)) rows = (decoded as any).rows;
+        if ((decoded as any).chart && typeof (decoded as any).chart === 'object') chart = (decoded as any).chart;
+        if (Array.isArray((decoded as any).labels) && Array.isArray((decoded as any).values)) {
+          chart = {
+            type: String((decoded as any).type || 'bar'),
+            title: String((decoded as any).title || 'Chart'),
+            labels: (decoded as any).labels,
+            values: (decoded as any).values,
+          };
+        }
+        if (typeof (decoded as any).reply === 'string' && (decoded as any).reply.trim()) {
+          finalReply = (decoded as any).reply.trim();
+        } else if (rows.length > 0 && (!finalReply || finalReply.startsWith('{') || finalReply.startsWith('['))) {
+          finalReply = `已查询到 ${rows.length} 条记录。`;
+        }
+      }
+
       await conn.end();
-      return res.json({ ok: true, mode: 'openclaw-agent', rows: [], sqlUsed: null, llmError: null, reply });
+      return res.json({ ok: true, mode: 'openclaw-agent', rows, chart, sqlUsed: null, llmError: null, reply: finalReply });
     } catch (e: any) {
       const err = String(e?.stderr || e?.stdout || e?.message || e || 'openclaw_agent_error').slice(0, 500);
       if (strict) {

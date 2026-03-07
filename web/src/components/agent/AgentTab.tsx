@@ -153,34 +153,37 @@ export function AgentTab({
                           )}
                         </GlassCard>
                       ) : null}
-                      {t0.rows && t0.rows.length > 0 ? (
-                        <ScrollArea mt="xs">
-                          <Table withTableBorder withColumnBorders verticalSpacing="xs" miw={760}>
-                            <Table.Thead>
-                              <Table.Tr>
-                                <Table.Th>ID</Table.Th>
-                                <Table.Th>Name</Table.Th>
-                                <Table.Th>Owner</Table.Th>
-                                <Table.Th>Score</Table.Th>
-                                <Table.Th>Status</Table.Th>
-                                <Table.Th>Locked</Table.Th>
-                              </Table.Tr>
-                            </Table.Thead>
-                            <Table.Tbody>
-                              {t0.rows.slice(0, 20).map(r => (
-                                <Table.Tr key={r.id}>
-                                  <Table.Td style={{ paddingTop: 6, paddingBottom: 6 }}>{r.id}</Table.Td>
-                                  <Table.Td>{r.name}</Table.Td>
-                                  <Table.Td style={{ paddingTop: 6, paddingBottom: 6 }}>{r.owner || '-'}</Table.Td>
-                                  <Table.Td>{r.tidb_potential_score ?? '-'}</Table.Td>
-                                  <Table.Td style={{ paddingTop: 6, paddingBottom: 6 }}>{r.lead_status}</Table.Td>
-                                  <Table.Td>{r.manual_locked ? 'Y' : '-'}</Table.Td>
+                      {t0.rows && t0.rows.length > 0 ? (() => {
+                        const first = t0.rows[0] || {};
+                        const defaultLeadKeys = ['id', 'name', 'owner', 'score', 'tidb_potential_score', 'lead_status', 'manual_locked'];
+                        const keys = defaultLeadKeys.filter((k) => k in first).length >= 3
+                          ? defaultLeadKeys.filter((k) => k in first)
+                          : Object.keys(first).slice(0, 10);
+                        return (
+                          <ScrollArea mt="xs">
+                            <Table withTableBorder withColumnBorders verticalSpacing="xs" miw={760}>
+                              <Table.Thead>
+                                <Table.Tr>
+                                  {keys.map((k) => (
+                                    <Table.Th key={k}>{k}</Table.Th>
+                                  ))}
                                 </Table.Tr>
-                              ))}
-                            </Table.Tbody>
-                          </Table>
-                        </ScrollArea>
-                      ) : null}
+                              </Table.Thead>
+                              <Table.Tbody>
+                                {t0.rows.slice(0, 50).map((r: any, idx: number) => (
+                                  <Table.Tr key={String(r?.id ?? idx)}>
+                                    {keys.map((k) => (
+                                      <Table.Td key={k} style={{ paddingTop: 6, paddingBottom: 6 }}>
+                                        {r?.[k] == null ? '-' : String(r[k])}
+                                      </Table.Td>
+                                    ))}
+                                  </Table.Tr>
+                                ))}
+                              </Table.Tbody>
+                            </Table>
+                          </ScrollArea>
+                        );
+                      })() : null}
                     </Paper>
                   </Box>
                 ))}
