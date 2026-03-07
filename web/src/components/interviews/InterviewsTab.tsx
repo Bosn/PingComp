@@ -1,6 +1,6 @@
-import { Tabs, Box, Group, TextInput, Button, Select, Divider, ScrollArea, Table, Text, Tooltip, ActionIcon, ThemeIcon, Badge } from '@mantine/core';
+import { Tabs, Box, Group, TextInput, Button, Select, Divider, ScrollArea, Table, Text, Tooltip, ActionIcon, ThemeIcon, Badge, Collapse } from '@mantine/core';
 import { IconFilter, IconDownload, IconEdit, IconNotes, IconCalendar, IconEye } from '@tabler/icons-react';
-import { GlassCard } from '../shared';
+import { GlassCard, PagePagination } from '../shared';
 import { useThemeStyles } from '../../hooks/useThemeStyles';
 import type { Interview } from '../../types';
 import type { I18NStrings } from '../../i18n';
@@ -31,12 +31,17 @@ type Props = {
   setInterviewsTabDateFrom: (v: string) => void;
   interviewsTabDateTo: string;
   setInterviewsTabDateTo: (v: string) => void;
+  showMoreFilters: boolean;
+  setShowMoreFilters: (v: boolean | ((prev: boolean) => boolean)) => void;
   interviewsRows: Interview[];
-  setInterviewsRows: (v: Interview[]) => void;
-  interviewsCursor: string | null;
-  setInterviewsCursor: (v: string | null) => void;
+  interviewsPage: number;
+  setInterviewsPage: (v: number) => void;
+  interviewsPageSize: string;
+  setInterviewsPageSize: (v: string) => void;
+  interviewsTotalPages: number;
+  interviewsTotalRows: number;
   interviewsLoading: boolean;
-  loadInterviews: (opts?: { reset?: boolean }) => void;
+  resetInterviewsFilters: () => void;
   getExportParams: () => URLSearchParams;
   openInterviewEditor: (it: Interview) => void;
   openInterviewDetail: (index: number) => void;
@@ -52,9 +57,12 @@ export function InterviewsTab({
   interviewsTabDatePreset, setInterviewsTabDatePreset,
   interviewsTabDateFrom, setInterviewsTabDateFrom,
   interviewsTabDateTo, setInterviewsTabDateTo,
-  interviewsRows, setInterviewsRows,
-  interviewsCursor, setInterviewsCursor,
-  interviewsLoading, loadInterviews, getExportParams,
+  showMoreFilters, setShowMoreFilters,
+  interviewsRows,
+  interviewsPage, setInterviewsPage,
+  interviewsPageSize, setInterviewsPageSize,
+  interviewsTotalPages, interviewsTotalRows,
+  interviewsLoading, resetInterviewsFilters, getExportParams,
   openInterviewEditor, openInterviewDetail, t,
 }: Props) {
   const { isDark } = useThemeStyles();
@@ -68,7 +76,7 @@ export function InterviewsTab({
               <IconNotes size={14} />
             </ThemeIcon>
             <Text fw={700} size="md">Interviews</Text>
-            <Badge size="sm" variant="light" color="teal">{interviewsRows.length}</Badge>
+            <Badge size="sm" variant="light" color="teal">{interviewsTotalRows}</Badge>
           </Group>
 
           <Box style={{
@@ -77,21 +85,36 @@ export function InterviewsTab({
             background: isDark ? 'rgba(30,41,59,0.4)' : 'rgba(241,245,249,0.6)',
             border: `1px solid ${isDark ? 'rgba(120,140,180,0.15)' : 'rgba(148,163,184,0.12)'}`,
           }}>
-            <Group wrap="wrap" align="end">
-              <TextInput w={240} label={t.leadId} placeholder="(optional)" value={interviewsTabLeadId} onChange={(e) => setInterviewsTabLeadId(e.currentTarget.value)} />
-              <TextInput w={260} label="Search" placeholder="q (title/summary/transcript)" value={interviewsTabQ} onChange={(e) => setInterviewsTabQ(e.currentTarget.value)} />
-              <TextInput w={150} label="Channel" placeholder="meeting/wechat/..." value={interviewsTabChannel} onChange={(e) => setInterviewsTabChannel(e.currentTarget.value)} />
-              <TextInput w={160} label="Interviewer" placeholder="(optional)" value={interviewsTabInterviewer} onChange={(e) => setInterviewsTabInterviewer(e.currentTarget.value)} />
-              <TextInput w={220} label="Tags (comma)" placeholder="pricing,security" value={interviewsTabTags} onChange={(e) => setInterviewsTabTags(e.currentTarget.value)} />
-              <Select w={150} label="Date preset" data={[{ value: 'last7', label: 'last7' }, { value: 'last30', label: 'last30' }, { value: 'last90', label: 'last90' }]} value={interviewsTabDatePreset} onChange={(v) => setInterviewsTabDatePreset(v || 'last30')} />
-              <TextInput w={140} label={t.from} placeholder="YYYY-MM-DD" value={interviewsTabDateFrom} onChange={(e) => setInterviewsTabDateFrom(e.currentTarget.value)} />
-              <TextInput w={140} label={t.to} placeholder="YYYY-MM-DD" value={interviewsTabDateTo} onChange={(e) => setInterviewsTabDateTo(e.currentTarget.value)} />
-              <Button variant="gradient" gradient={{ from: 'teal', to: 'green', deg: 135 }} leftSection={<IconFilter size={14} />} onClick={() => { setInterviewsRows([]); setInterviewsCursor(null); loadInterviews({ reset: true }); }}>{t.apply}</Button>
-              <Button variant="light" leftSection={<IconDownload size={14} />} onClick={() => {
-                window.open(`/interviews/export.md?${getExportParams().toString()}`, '_blank');
-              }}>Export md</Button>
+            <Group wrap="wrap" align="end" justify="space-between">
+              <Group wrap="wrap" align="end">
+                <TextInput leftSection={<IconFilter size={14} />} w={320} label="Search" placeholder="q (title/summary/transcript)" value={interviewsTabQ} onChange={(e) => setInterviewsTabQ(e.currentTarget.value)} />
+                <TextInput w={200} label={t.leadId} placeholder="(optional)" value={interviewsTabLeadId} onChange={(e) => setInterviewsTabLeadId(e.currentTarget.value)} />
+                <Select w={150} label="Date preset" data={[{ value: 'last7', label: 'last7' }, { value: 'last30', label: 'last30' }, { value: 'last90', label: 'last90' }]} value={interviewsTabDatePreset} onChange={(v) => setInterviewsTabDatePreset(v || 'last30')} />
+                <Button variant="default" onClick={() => setShowMoreFilters((v) => !v)}>{showMoreFilters ? 'Less' : 'More'}</Button>
+                <Button variant="subtle" onClick={resetInterviewsFilters}>{t.reset}</Button>
+              </Group>
+              <Group gap={8}>
+                <Button variant="light" leftSection={<IconDownload size={14} />} onClick={() => {
+                  window.open(`/interviews/export.md?${getExportParams().toString()}`, '_blank');
+                }}>Export md</Button>
+              </Group>
             </Group>
+
+            <Collapse in={showMoreFilters}>
+              <Divider my="sm" style={{ borderColor: isDark ? 'rgba(120,140,180,0.1)' : 'rgba(148,163,184,0.08)' }} />
+              <Group mt="xs" wrap="wrap" align="end">
+                <TextInput w={150} label="Channel" placeholder="meeting/wechat/..." value={interviewsTabChannel} onChange={(e) => setInterviewsTabChannel(e.currentTarget.value)} />
+                <TextInput w={160} label="Interviewer" placeholder="(optional)" value={interviewsTabInterviewer} onChange={(e) => setInterviewsTabInterviewer(e.currentTarget.value)} />
+                <TextInput w={220} label="Tags (comma)" placeholder="pricing,security" value={interviewsTabTags} onChange={(e) => setInterviewsTabTags(e.currentTarget.value)} />
+                <TextInput w={140} label={t.from} placeholder="YYYY-MM-DD" value={interviewsTabDateFrom} onChange={(e) => setInterviewsTabDateFrom(e.currentTarget.value)} />
+                <TextInput w={140} label={t.to} placeholder="YYYY-MM-DD" value={interviewsTabDateTo} onChange={(e) => setInterviewsTabDateTo(e.currentTarget.value)} />
+              </Group>
+            </Collapse>
           </Box>
+
+          <Group mt="md" justify="space-between" wrap="wrap">
+            <Text size="sm" c="dimmed">{t.total}: {interviewsTotalRows} · {t.page}: {interviewsPage}/{interviewsTotalPages}{interviewsLoading ? ` · ${t.loading}` : ''}</Text>
+          </Group>
 
           <Divider my="md" style={{ borderColor: isDark ? 'rgba(120,140,180,0.15)' : 'rgba(148,163,184,0.12)' }} />
 
@@ -191,16 +214,16 @@ export function InterviewsTab({
             </Table>
           </ScrollArea>
 
-          <Group mt="md" justify="flex-end">
-            <Button
-              variant={interviewsCursor ? 'gradient' : 'default'}
-              gradient={{ from: 'teal', to: 'green', deg: 135 }}
-              disabled={!interviewsCursor || interviewsLoading}
-              onClick={() => loadInterviews({ reset: false })}
-            >
-              {interviewsCursor ? 'Load more' : 'All loaded'}
-            </Button>
-          </Group>
+          <PagePagination
+            page={interviewsPage}
+            totalPages={interviewsTotalPages}
+            pageSize={interviewsPageSize}
+            onPageChange={setInterviewsPage}
+            onPageSizeChange={setInterviewsPageSize}
+            pageSizeLabel={t.pageSize}
+            prevLabel={t.prev}
+            nextLabel={t.next}
+          />
         </GlassCard>
       </Box>
     </Tabs.Panel>

@@ -1,4 +1,4 @@
-import { Badge, Box, Button, Center, Code, Divider, Group, Loader, Modal, Paper, SimpleGrid, Stack, Text } from '@mantine/core';
+import { Badge, Box, Button, Center, Divider, Group, Loader, Modal, Paper, SimpleGrid, Stack, Text } from '@mantine/core';
 import { IconChevronLeft, IconChevronRight, IconDownload } from '@tabler/icons-react';
 import { useEffect, useRef, useState } from 'react';
 
@@ -14,8 +14,14 @@ type Props = {
   onNext: () => void;
 };
 
+function isPresent(value: unknown) {
+  if (value == null) return false;
+  if (typeof value === 'string') return value.trim().length > 0;
+  return true;
+}
+
 function renderValue(value: unknown) {
-  const text = value == null || value === '' ? '-' : String(value);
+  const text = String(value ?? '');
   return (
     <Text size="sm" style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
       {text}
@@ -83,6 +89,26 @@ export function InterviewDetailModal({
     .split(',')
     .map((tag) => tag.trim())
     .filter(Boolean);
+  const optionalFields = detail ? [
+    ['Interviewer', detail.interviewer],
+    ['Company', detail.company],
+    ['Contact Name', detail.contact_name],
+    ['Contact Role', detail.contact_role],
+    ['Created At', detail.created_at],
+    ['Created By', detail.created_by],
+    ['Updated At', detail.updated_at],
+    ['Updated By', detail.updated_by],
+  ].filter(([, value]) => isPresent(value)) : [];
+  const optionalSections = detail ? [
+    ['Summary', detail.summary],
+    ['Pain Points', detail.pain_points],
+    ['Current Solution', detail.current_solution],
+    ['Requirements', detail.requirements],
+    ['Objections / Risks', detail.objections_risks],
+    ['Next Steps', detail.next_steps],
+    ['Transcript Plain', detail.transcript_plain],
+    ['Transcript HTML', detail.transcript_html],
+  ].filter(([, value]) => isPresent(value)) : [];
 
   return (
     <Modal
@@ -131,15 +157,14 @@ export function InterviewDetailModal({
               <DetailField label="Title" value={detail.title} />
               <DetailField label="Interview Date" value={detail.interview_date} />
               <DetailField label="Channel" value={detail.channel} />
-              <DetailField label="Interviewer" value={detail.interviewer} />
-              <DetailField label="Company" value={detail.company} />
-              <DetailField label="Contact Name" value={detail.contact_name} />
-              <DetailField label="Contact Role" value={detail.contact_role} />
-              <Paper withBorder radius="md" p="sm">
-                <Text size="xs" c="dimmed" tt="uppercase" fw={700} mb={6}>
-                  Tags
-                </Text>
-                {tags.length ? (
+              {optionalFields.map(([label, value]) => (
+                <DetailField key={label} label={label} value={value} />
+              ))}
+              {tags.length ? (
+                <Paper withBorder radius="md" p="sm">
+                  <Text size="xs" c="dimmed" tt="uppercase" fw={700} mb={6}>
+                    Tags
+                  </Text>
                   <Group gap={6}>
                     {tags.map((tag) => (
                       <Badge key={tag} variant="outline" size="sm">
@@ -147,39 +172,25 @@ export function InterviewDetailModal({
                       </Badge>
                     ))}
                   </Group>
-                ) : (
-                  renderValue(detail.tags)
-                )}
-              </Paper>
-              <DetailField label="Created At" value={detail.created_at} />
-              <DetailField label="Created By" value={detail.created_by} />
-              <DetailField label="Updated At" value={detail.updated_at} />
-              <DetailField label="Updated By" value={detail.updated_by} />
-              <DetailField label="Deleted At" value={detail.deleted_at} />
+                </Paper>
+              ) : null}
             </SimpleGrid>
 
-            <DetailField label="Summary" value={detail.summary} />
-            <DetailField label="Pain Points" value={detail.pain_points} />
-            <DetailField label="Current Solution" value={detail.current_solution} />
-            <DetailField label="Requirements" value={detail.requirements} />
-            <DetailField label="Objections / Risks" value={detail.objections_risks} />
-            <DetailField label="Next Steps" value={detail.next_steps} />
-            <DetailField label="Transcript Plain" value={detail.transcript_plain} />
-            <DetailField label="Transcript HTML" value={detail.transcript_html} />
+            {optionalSections.map(([label, value]) => (
+              <DetailField key={label} label={label} value={value} />
+            ))}
 
-            <Paper withBorder radius="md" p="sm">
-              <Text size="xs" c="dimmed" tt="uppercase" fw={700} mb={6}>
-                Transcript HTML Preview
-              </Text>
-              {detail.transcript_html ? (
+            {isPresent(detail.transcript_html) ? (
+              <Paper withBorder radius="md" p="sm">
+                <Text size="xs" c="dimmed" tt="uppercase" fw={700} mb={6}>
+                  Transcript HTML Preview
+                </Text>
                 <Box
                   style={{ whiteSpace: 'normal', wordBreak: 'break-word' }}
-                  dangerouslySetInnerHTML={{ __html: detail.transcript_html }}
+                  dangerouslySetInnerHTML={{ __html: String(detail.transcript_html) }}
                 />
-              ) : (
-                <Code>-</Code>
-              )}
-            </Paper>
+              </Paper>
+            ) : null}
           </Stack>
         ) : (
           <Text size="sm" c="dimmed">No interview selected.</Text>

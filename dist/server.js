@@ -439,6 +439,9 @@ app.get('/api/interviews', async (req, res) => {
     const interviewer = String(req.query.interviewer || '').trim();
     const tags = parseTagsQuery(req.query);
     const { from, to } = parseDateRange(req.query);
+    const pageMode = req.query.page != null || req.query.pageSize != null;
+    const page = Math.max(1, Number(req.query.page || 1) || 1);
+    const pageSize = Math.min(100, Math.max(10, Number(req.query.pageSize || 15) || 15));
     const limit = Math.min(100, Math.max(10, Number(req.query.limit || 20)));
     const cursor = String(req.query.cursor || '').trim();
     let cursorDate = null;
@@ -486,6 +489,17 @@ app.get('/api/interviews', async (req, res) => {
             where += ' AND (' + tags.map(() => 'tags LIKE ?').join(' OR ') + ')';
             for (const t of tags)
                 args.push(`%${t}%`);
+        }
+        if (pageMode) {
+            const offset = (page - 1) * pageSize;
+            const [countRows] = await conn.query(`SELECT COUNT(*) c FROM interviews ${where}`, args);
+            const total = Number(countRows?.[0]?.c || 0);
+            const totalPages = Math.max(1, Math.ceil(total / pageSize));
+            const [rows] = await conn.query(`SELECT id,lead_id,title,interview_date,channel,interviewer,company,summary,tags,updated_at
+         FROM interviews ${where}
+         ORDER BY interview_date DESC, id DESC
+         LIMIT ? OFFSET ?`, [...args, pageSize, offset]);
+            return res.json({ ok: true, rows: rows || [], page, total, totalPages });
         }
         if (cursorDate && cursorId) {
             where += ' AND (interview_date < ? OR (interview_date = ? AND id < ?))';

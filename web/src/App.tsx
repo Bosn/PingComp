@@ -110,9 +110,7 @@ export function App() {
     }
 
     if (tab === 'interviews') {
-      interviews.setInterviewsRows([]);
-      interviews.setInterviewsCursor(null);
-      await interviews.loadInterviews({ reset: true });
+      await interviews.loadInterviews({ pageOverride: interviews.interviewsPage });
     }
   }
 
@@ -199,10 +197,13 @@ export function App() {
             interviewsTabDatePreset={interviews.interviewsTabDatePreset} setInterviewsTabDatePreset={interviews.setInterviewsTabDatePreset}
             interviewsTabDateFrom={interviews.interviewsTabDateFrom} setInterviewsTabDateFrom={interviews.setInterviewsTabDateFrom}
             interviewsTabDateTo={interviews.interviewsTabDateTo} setInterviewsTabDateTo={interviews.setInterviewsTabDateTo}
-            interviewsRows={interviews.interviewsRows} setInterviewsRows={interviews.setInterviewsRows}
-            interviewsCursor={interviews.interviewsCursor} setInterviewsCursor={interviews.setInterviewsCursor}
+            showMoreFilters={interviews.showMoreFilters} setShowMoreFilters={interviews.setShowMoreFilters}
+            interviewsRows={interviews.interviewsRows}
+            interviewsPage={interviews.interviewsPage} setInterviewsPage={interviews.setInterviewsPage}
+            interviewsPageSize={interviews.interviewsPageSize} setInterviewsPageSize={interviews.setInterviewsPageSize}
+            interviewsTotalPages={interviews.interviewsTotalPages} interviewsTotalRows={interviews.interviewsTotalRows}
             interviewsLoading={interviews.interviewsLoading}
-            loadInterviews={interviews.loadInterviews}
+            resetInterviewsFilters={interviews.resetInterviewsFilters}
             getExportParams={interviews.getExportParams}
             openInterviewEditor={leads.openInterviewEditor}
             openInterviewDetail={(index) => showInterviewDetailFromRows(interviews.interviewsRows, index)}
