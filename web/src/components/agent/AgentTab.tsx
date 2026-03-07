@@ -1,6 +1,7 @@
-import { Tabs, Box, Paper, Stack, Group, Text, Badge, Button, TextInput, Select, ScrollArea, Table } from '@mantine/core';
+import { Tabs, Box, Paper, Stack, Group, Text, Badge, Button, TextInput, ScrollArea, Table } from '@mantine/core';
 import { IconSend, IconRobot } from '@tabler/icons-react';
 import { useComputedColorScheme } from '@mantine/core';
+import { useEffect, useRef } from 'react';
 import { GlassCard } from '../shared';
 import { PieMini, LineMini, BarMini } from '../charts';
 import { useThemeStyles } from '../../hooks/useThemeStyles';
@@ -32,11 +33,16 @@ export function AgentTab({
 }: Props) {
   const computedColorScheme = useComputedColorScheme('light', { getInitialValueInEffect: false });
   const { isDark, glassCard } = useThemeStyles();
+  const bottomRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+  }, [agentTurns.length, agentLoading, currentSessionId]);
 
   return (
     <Tabs.Panel value="agent" pt="md">
-      <Box px="md" style={{ minHeight: 'calc(100vh - 210px)' }}>
-        <Box style={{ display: 'flex', gap: 16, minHeight: 'calc(100vh - 230px)' }}>
+      <Box px="md" style={{ height: 'calc(100vh - 210px)', minHeight: 560, overflow: 'hidden' }}>
+        <Box style={{ display: 'flex', gap: 16, height: '100%', minHeight: 0 }}>
           {/* Session sidebar */}
           <Paper
             withBorder
@@ -92,12 +98,14 @@ export function AgentTab({
             style={{
               ...glassCard,
               flex: 1,
+              minHeight: 0,
+              overflow: 'hidden',
               display: 'flex',
               flexDirection: 'column',
             }}
           >
-            <ScrollArea style={{ flex: 1 }} offsetScrollbars scrollbarSize={8}>
-              <Stack gap="md" pr="sm">
+            <ScrollArea style={{ flex: 1, minHeight: 0 }} offsetScrollbars scrollbarSize={8}>
+              <Stack gap="md" pr="sm" pb="sm">
                 {agentTurns.map((t0, i) => (
                   <Box
                     key={i}
@@ -188,6 +196,7 @@ export function AgentTab({
                     </Paper>
                   </Box>
                 )}
+                <div ref={bottomRef} />
               </Stack>
             </ScrollArea>
             {/* Floating input bar */}
@@ -197,7 +206,10 @@ export function AgentTab({
               radius="xl"
               withBorder
               style={{
-                background: isDark ? 'rgba(30,41,59,0.7)' : 'rgba(255,255,255,0.9)',
+                position: 'sticky',
+                bottom: 0,
+                zIndex: 2,
+                background: isDark ? 'rgba(30,41,59,0.85)' : 'rgba(255,255,255,0.95)',
                 borderColor: isDark ? 'rgba(120,140,180,0.25)' : 'rgba(148,163,184,0.2)',
                 backdropFilter: 'blur(12px)',
               }}
