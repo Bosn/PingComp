@@ -3,6 +3,8 @@ import dotenv from 'dotenv';
 import { auth } from 'express-openid-connect';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+import fs from 'node:fs/promises';
+import path from 'node:path';
 import { getConn, migrate, TABLE } from './db.js';
 import { htmlToPlain } from './utils/htmlToPlain.js';
 import { getSendGridConfigError, isSendGridEnabled, sendViaSendGrid } from './services/sendgrid.js';
@@ -1572,6 +1574,43 @@ app.get('/api/dashboard', async (_req: Request, res: Response) => {
   const dailyTrend = Array.isArray(trendRows) ? trendRows.map((r:any)=>({ d: String(r.d), c: Number(r.c||0) })) : [];
   await conn.end();
   res.json({ total: tot?.c || 0, locked: locked?.c || 0, avgScore: avgScore?.score || 0, statusRows, topRows, dailyTrend, scoreBuckets, enrichRows });
+});
+
+app.get('/api/briefs', async (req: Request, res: Response) => {
+  const limit = Math.max(1, Math.min(50, Number(req.query.limit || 10)));
+  const dir = path.join(process.cwd(), 'brief');
+  try {
+    const names = (await fs.readdir(dir))
+      .filter((n) => n.endsWith('.md'))
+      .sort((a, b) => b.localeCompare(a))
+      .slice(0, limit);
+
+    const rows = await Promise.all(names.map(async (name) => {
+      const full = path.join(dir, name);
+      const content = await fs.readFile(full, 'utf8');
+      const stat = await fs.stat(full);
+      return {
+        name,
+        createdAt: stat.mtime.toISOString(),
+        content,
+      };
+    }));
+
+    return res.json({ ok: true, rows });
+  } catch (e: any) {
+    if (e?.code === 'ENOENT') return res.json({ ok: true, rows: [] });
+    return res.status(500).json({ ok: false, error: String(e?.message || e) });
+  }
+});
+
+app.get('/api/briefs/run', async (_req: Request, res: Response) => {
+  try {
+    const script = path.join(process.cwd(), 'scripts', 'generate-brief.mjs');
+    const { stdout, stderr } = await execFileAsync('node', [script], { cwd: process.cwd(), maxBuffer: 8 * 1024 * 1024 });
+    return res.json({ ok: true, stdout: String(stdout || ''), stderr: String(stderr || '') });
+  } catch (e: any) {
+    return res.status(500).json({ ok: false, error: String(e?.stderr || e?.message || e) });
+  }
 });
 
 app.get('/api/enrich/queue', async (_req: Request, res: Response) => {

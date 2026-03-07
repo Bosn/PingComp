@@ -1,5 +1,5 @@
 import { Tabs } from '@mantine/core';
-import { IconMessageCircle, IconBrain, IconActivity, IconNotes, IconBolt, IconGauge } from '@tabler/icons-react';
+import { IconMessageCircle, IconBrain, IconActivity, IconNotes, IconBolt, IconGauge, IconReportAnalytics } from '@tabler/icons-react';
 import { useThemeStyles } from '../../hooks/useThemeStyles';
 import type { I18NStrings } from '../../i18n';
 
@@ -34,6 +34,7 @@ export function TabNavigation({ tab, setTab, t, children }: TabNavigationProps) 
           gap: 4,
         }}
       >
+        <Tabs.Tab value="brief" leftSection={<IconReportAnalytics size={15} />} style={{ borderRadius: 0, fontWeight: 600 }} color="blue">{t.brief}</Tabs.Tab>
         <Tabs.Tab value="agent" leftSection={<IconMessageCircle size={15} />} style={{ borderRadius: 0, fontWeight: 600 }} color="blue">{t.agent}</Tabs.Tab>
         <Tabs.Tab value="leads" leftSection={<IconBrain size={15} />} style={{ borderRadius: 0, fontWeight: 600 }} color="blue">{t.leads}</Tabs.Tab>
         <Tabs.Tab value="outreach" leftSection={<IconActivity size={15} />} style={{ borderRadius: 0, fontWeight: 600 }} color="blue">{t.outreach}</Tabs.Tab>

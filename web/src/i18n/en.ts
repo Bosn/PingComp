@@ -1,5 +1,5 @@
 export const en = {
-  title: 'PingComp', subtitle: 'Lead ops workspace', agent: 'Agent', dashboard: 'Dashboard', leads: 'Leads', interviews: 'Interviews', enrich: 'Enrich Queue', outreach: 'Outreach Center', emails: 'Emails', leadId: 'Lead ID', email: 'Email', from: 'From', to: 'To', sentAt: 'Sent At', subject: 'Subject', sender: 'Sender', content: 'Content',
+  title: 'PingComp', subtitle: 'Lead ops workspace', brief: 'Brief', refresh: 'Refresh', agent: 'Agent', dashboard: 'Dashboard', leads: 'Leads', interviews: 'Interviews', enrich: 'Enrich Queue', outreach: 'Outreach Center', emails: 'Emails', leadId: 'Lead ID', email: 'Email', from: 'From', to: 'To', sentAt: 'Sent At', subject: 'Subject', sender: 'Sender', content: 'Content',
   filter: 'Filter', reset: 'Reset', search: 'Search name/owner/vertical/source/tags', minScore: 'Min score', status: 'Status', region: 'Country/Region', creator: 'Creator', pageSize: 'Page size',
   page: 'Page', lockOnly: 'Locked only', prev: 'Prev', next: 'Next', edit: 'Edit', saveLock: 'Save & lock', total: 'Total leads',
   locked: 'Manual locked', avg: 'Avg score', lockRate: 'Lock ratio', exportCsv: 'Export CSV', runBatch: 'Run batch (20)',

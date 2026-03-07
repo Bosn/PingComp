@@ -17,6 +17,7 @@ import { useOutreach } from './hooks/useOutreach';
 import { useAgent } from './hooks/useAgent';
 import { AppHeader } from './components/layout/AppHeader';
 import { TabNavigation } from './components/layout/TabNavigation';
+import { BriefTab } from './components/brief/BriefTab';
 import { AgentTab } from './components/agent/AgentTab';
 import { LeadsTab } from './components/leads/LeadsTab';
 import { OutreachTab } from './components/outreach/OutreachTab';
@@ -32,7 +33,7 @@ export function App() {
   const { lang, setLang, t } = useLocalLang();
   const { me } = useAuth();
 
-  const [tab, setTab] = useState<string | null>(() => localStorage.getItem('pingcomp_tab') || 'agent');
+  const [tab, setTab] = useState<string | null>(() => localStorage.getItem('pingcomp_tab') || 'brief');
 
   useEffect(() => {
     if (tab) localStorage.setItem('pingcomp_tab', tab);
@@ -120,6 +121,8 @@ export function App() {
         <AppHeader t={t} lang={lang} setLang={setLang} me={me} />
 
         <TabNavigation tab={tab} setTab={setTab} t={t}>
+          <BriefTab t={t} />
+
           <AgentTab
             agentInput={agent.agentInput}
             setAgentInput={agent.setAgentInput}

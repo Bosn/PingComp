@@ -1,5 +1,5 @@
 export const zh = {
-  title: 'PingComp', subtitle: '潜在客户人工清洗与标注', agent: 'Agent', dashboard: '仪表盘', leads: '线索管理', interviews: '访谈记录', enrich: 'Enrich 队列', outreach: '触达中心', emails: '触达邮件', leadId: '线索ID', email: '邮箱', from: '起始', to: '截止', sentAt: '发送时间', subject: '标题', sender: '发送方', content: '内容',
+  title: 'PingComp', subtitle: '潜在客户人工清洗与标注', brief: '简报', refresh: '刷新', agent: 'Agent', dashboard: '仪表盘', leads: '线索管理', interviews: '访谈记录', enrich: 'Enrich 队列', outreach: '触达中心', emails: '触达邮件', leadId: '线索ID', email: '邮箱', from: '起始', to: '截止', sentAt: '发送时间', subject: '标题', sender: '发送方', content: '内容',
   filter: '筛选', reset: '重置', search: '搜索 name/owner/vertical/source/tags', minScore: '最低分', status: '状态', region: '国家/地区', creator: 'Creator', page: '页码', pageSize: '每页条数',
   lockOnly: '仅锁定', prev: '上一页', next: '下一页', edit: '编辑', saveLock: '保存并锁定', total: '总线索',
   locked: '人工锁定', avg: '平均分', lockRate: '锁定占比', exportCsv: '导出CSV', runBatch: '执行一轮(20条)',
